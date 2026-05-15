@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strucnode"
+version = "1.0.0"
+description = "Desktop application for file analysis, metadata inspection, media preview, and node-based file organization."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "Helma"}
+]
+dependencies = [
+  "Pillow>=10.0.0",
+  "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+media = [
+  "opencv-python>=4.8.0",
+  "rawpy>=0.19.0",
+  "exifread>=3.0.0",
+  "sounddevice>=0.4.6",
+  "moviepy>=1.0.3",
+]
+
+[tool.setuptools]
+py-modules = ["strucnode"]
