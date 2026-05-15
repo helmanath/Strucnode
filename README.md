@@ -25,7 +25,7 @@ Add screenshots in `docs/images/` to show the Explorer, Node Editor, and Organiz
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/strucnode.git
+git clone https://github.com/helmanath/strucnode.git
 cd strucnode
 python -m venv .venv
 ```
