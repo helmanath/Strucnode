@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/Strucnode-Icone.png" alt="Strucnode logo" width="140">
+</p>
+
 # Strucnode
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
