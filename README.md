@@ -20,7 +20,20 @@ Strucnode is a desktop **Tkinter** application for analyzing folders, previewing
 
 ## Screenshots
 
-Add screenshots in `docs/images/` to show the Explorer, Node Editor, and Organize tabs.
+### Explorer
+Shows folder statistics, file categories, previews, and metadata inspection.
+
+![Explorer](docs/images/Explorer.png)
+
+### Node Editor
+Build folder structures visually with metadata nodes, connectors, and folder levels.
+
+![Node Editor](docs/images/Nodes.png)
+
+### Organize
+Preview copy/move operations, choose a destination, and manage duplicates.
+
+![Organize](docs/images/Organizer.png)
 
 ## Installation
 
