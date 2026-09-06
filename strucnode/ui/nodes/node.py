@@ -55,11 +55,24 @@ class Node:
         self.draw()
 
     @property
+    def label_is_default(self) -> bool:
+        """True while the label is the built-in default, not user-supplied.
+
+        Persisted in presets: a folder node left at its default must show
+        "Folder" or "Dossier" depending on the language, not the wording that
+        happened to be on screen when the preset was saved.
+        """
+        return bool(getattr(self, "_label_is_default", False))
+
+    @label_is_default.setter
+    def label_is_default(self, value: bool):
+        self._label_is_default = bool(value)
+
+    @property
     def display_label(self):
         """The label to show, resolved in the active locale."""
         if self.node_family == "folder":
-            return (t("node_default_folder")
-                    if getattr(self, "_label_is_default", False) else self._label)
+            return t("node_default_folder") if self.label_is_default else self._label
         if self.node_family == "argument" and self.type_key in fields.FIELDS:
             return fields.label(self.type_key)
         return self._label

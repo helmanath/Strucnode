@@ -597,7 +597,8 @@ class NodeEditorTab(tk.Frame):
         return {
             "nodes": [
                 {"id": nid, "family": n.node_family, "type_key": n.type_key,
-                 "label": n.label, "x": n.x, "y": n.y, "separator": n.separator}
+                 "label": n.label, "label_is_default": n.label_is_default,
+                 "x": n.x, "y": n.y, "separator": n.separator}
                 for nid, n in self._nodes.items()
             ],
             "connections": [
@@ -620,6 +621,7 @@ class NodeEditorTab(tk.Frame):
                      nd.get("type_key") or nd.get("typekey"),
                      nd["x"], nd["y"], label_override=nd.get("label"))
             n.separator = nd.get("separator", "")
+            n.label_is_default = nd.get("label_is_default", False)
             n.draw()
             self._nodes[nid] = n
         for cd in data.get("connections", []):
@@ -1129,7 +1131,7 @@ class NodeEditorTab(tk.Frame):
             if v:
                 self._mark_dirty()
                 n.label = v
-                n._label_is_default = False  # the user named this folder
+                n.label_is_default = False  # the user named this folder
             win.destroy()
         entry.bind("<Return>", confirm)
         tr(tk.Button(win, bg=PRIMARY, fg="#0f3638", relief="flat",

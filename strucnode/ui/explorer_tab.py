@@ -6,6 +6,7 @@ import logging
 import threading
 import tkinter as tk
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -44,6 +45,9 @@ log = logging.getLogger(__name__)
 
 #: Index of the "all values" entry, always first in every filter combo.
 ALL_INDEX = 0
+
+#: EXIF reads are I/O bound, so a few threads help; more only thrash the disk.
+EXIF_WORKERS = 8
 
 #: EXIF filter field -> i18n key for its inline label.
 EXIF_FILTER_LABELS = {
@@ -525,9 +529,18 @@ class ExplorerTab(tk.Frame):
             threading.Thread(target=self._load_exif_bg,daemon=True).start()
 
     def _load_exif_bg(self):
-        for f in self._file_rows:
-            if not f["meta"]: f["meta"]=read_exif(f["path"])
-        self.after(0,self._on_exif_loaded)
+        """Read EXIF for the visible rows. Runs on a worker thread.
+
+        The work is I/O bound, so a small pool beats reading one file at a
+        time; the rows are mutated in place and the table is refreshed once.
+        """
+        pending = [f for f in self._file_rows if not f["meta"]]
+        if pending:
+            with ThreadPoolExecutor(max_workers=EXIF_WORKERS) as pool:
+                metas = pool.map(read_exif, [f["path"] for f in pending])
+                for info, meta in zip(pending, metas, strict=False):
+                    info["meta"] = meta
+        self.after(0, self._on_exif_loaded)
 
     def _on_exif_loaded(self): self._exif_lbl.config(text=""); self._populate_exif_combos(); self._apply_file_filter()
 

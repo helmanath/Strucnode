@@ -539,3 +539,82 @@ Le projet est sain sur le fond. Les trois axes, par ordre de rentabilité :
 3. **L'extraction d'un `core/` sans Tkinter** est ce qui rend le projet testable — et
    donc ce qui rend toutes les évolutions suivantes sûres, y compris celles qui
    touchent au déplacement de fichiers.
+
+
+---
+
+## 8. État d'avancement
+
+Le découpage a été réalisé. Cette section fait le lien entre le diagnostic
+ci-dessus et ce qui est effectivement dans le dépôt, y compris ce qui reste.
+
+### Fait
+
+| § | Sujet | Où |
+|---|---|---|
+| 2.2 | Découpage en paquet `strucnode/` | `app.py`, `config.py`, `theme.py`, `core/`, `media/`, `ui/`, `i18n/` |
+| 2.2 | `core/` sans aucun import Tkinter | vérifié par `tests/test_imports.py` et par l'absence d'import `tkinter` dans `core/` |
+| 3.3 | Traductions hors du code | `strucnode/i18n/locales/{en,fr}.json` |
+| 3.3 | Liaison widget → clé (`tr`, `tr_var`, `set_raw`) | `strucnode/i18n/__init__.py` |
+| 3.2 | Les ~20 chaînes en dur reprises | en-têtes de colonnes, panneau métadonnées, filtres EXIF, statuts, suffixe de renommage, unités de taille, tranches de taille |
+| 3.3 | Tests de cohérence des catalogues | `tests/test_i18n.py` |
+| 4.1 | Code mort supprimé, logique de rafraîchissement rebranchée | `ExplorerTab._render_summary` / `_render_categories`, `StrucnodeApp._render_scan_status` |
+| 4.2 | Filtres cassés en anglais | sentinelle par index de combo (`ALL_INDEX`), `ExplorerTab._selected_filter` |
+| 4.3 | `NameError` dans les gestionnaires d'erreur | capture par valeur (`lambda e=exc:`) dans `media/video.py` et `ui/viewers.py` |
+| 4.4 | Fichiers non appariés copiés dans `?` | `core/planner.build_plan` les sort de `operations` |
+| 4.5 | Mode « comparer » qui écrasait | `core/executor._resolve_collision` renomme au lieu d'écraser |
+| 4.6 | Collisions entre deux sources | `Plan.internal_collisions` |
+| 4.7 | Noms de dossiers non assainis | `core/tree.sanitize_component`, appliqué à chaque composant |
+| 4.8 | Traversée sur les noms de presets | `PresetStore.path_for` assainit le nom |
+| 4.8 | Cache EXIF non borné | LRU de 20 000 entrées, clé `(chemin, mtime, taille)` |
+| 4.8 | Logique EXIF dupliquée | une seule analyse dans `core/metadata.read_metadata` |
+| 4.8 | `Image.open` sans fermeture | `with Image.open(...)` |
+| 4.8 | Destination dans la source | `planner.destination_is_inside` |
+| 4.8 | Preset sans version | `SCHEMA_VERSION` dans `PresetStore` |
+| 4.8 | Dossier de presets mal nommé | `~/.strucnode/presets`, avec migration de l'ancien dossier |
+| 4.8 | `print()` de debug | remplacés par `logging` |
+| 5.1 | Lecture EXIF parallèle | `ThreadPoolExecutor` dans `ExplorerTab._load_exif_bg` |
+| 5.2 | Journal d'opérations | `~/.strucnode/journal/`, écrit par `core/executor` |
+| 5.2 | Vérification d'espace disque | `planner.free_space`, contrôlée avant exécution |
+| 5.2 | Copie atomique | fichier temporaire puis `os.replace` |
+| 5.2 | Résumé pré-exécution enrichi | `OrganizeTab._confirm_run` |
+| 5.3 | Tests | 384 tests, sans écran |
+| 5.3 | Lint + CI | `ruff` configuré, workflow sur Python 3.10 à 3.13 |
+| 5.4 | Préférences persistées | `~/.strucnode/settings.json` (langue, dernier dossier, destination) |
+| 5.4 | Détection de la langue système | `config.detect_locale`, au premier lancement |
+| 5.4 | Unités de taille localisées | clé `size_units` |
+| 5.5 | Point d'entrée + packaging | `strucnode` (gui-scripts), `python -m strucnode`, `packages` corrigé |
+| 5.5 | `requirements.txt` cohérent | dépendances optionnelles commentées, `[media]` dans le `pyproject.toml` |
+
+Le fichier `strucnode.py` à la racine ne contient plus que le lanceur, pour que
+la commande documentée dans le README continue de fonctionner.
+
+### Reste à faire
+
+Volontairement laissé de côté, par ordre de valeur :
+
+1. **`dataclass FileEntry`** (§5.3). Les fichiers indexés circulent toujours
+   comme des dictionnaires. Les remplacer touche presque tous les modules UI ;
+   c'est un changement à faire seul, avec les tests actuels comme filet.
+2. **Annulation de l'analyse depuis l'interface** (§5.1). Le mécanisme est en
+   place (`scanner.scan` accepte un `threading.Event`, et fermer la fenêtre
+   l'active), mais il n'y a pas encore de bouton d'arrêt à côté de la barre de
+   progression.
+3. **Annuler / rétablir dans l'éditeur nodal** (§5.4).
+4. **Annulation d'un déplacement à partir du journal** (§5.2). Le journal est
+   écrit, l'action « annuler » qui le relit n'existe pas encore.
+5. **Pagination du tableau de fichiers** (§5.1). Au-delà d'environ 20 000
+   fichiers l'insertion ligne par ligne fige encore l'interface.
+6. **Cache de miniatures sur disque** (§5.1).
+7. **Raccourcis clavier** (§5.4).
+8. **Recette PyInstaller** (§5.5).
+
+### Vérification
+
+Le conteneur utilisé pour ce travail n'a ni Tkinter ni Pillow : **l'application
+n'a pas pu être lancée**. Ce qui a été vérifié : `ruff` sans avertissement, 384
+tests verts, l'import de chacun des 22 modules (UI comprise, via un stub Tk), et
+un contrôle statique confirmant qu'aucun attribut `self.x` lu n'est laissé sans
+définition. Un essai à l'écran reste nécessaire avant publication, en particulier
+sur le glisser-déposer de la palette et le lecteur vidéo, que les tests ne
+couvrent pas.
