@@ -41,6 +41,7 @@ class StrucnodeApp(tk.Tk):
         self.configure(bg=BG)
 
         self._indexed = False
+        self._folder = self.settings.get("last_folder") or None
         self._scan_result = None
         self._scan_cancel = threading.Event()
         self._current_tab = "explorer"
@@ -67,11 +68,13 @@ class StrucnodeApp(tk.Tk):
            "app_title").pack(side="left", padx=(6, 20))
 
         self.path_var = tk.StringVar()
-        last = self.settings.get("last_folder") or ""
-        if last:
-            set_raw(self.path_var, last)
+        if self._folder:
+            set_raw(self.path_var, self._folder)
         else:
             tr_var(self.path_var, "no_folder")
+        # The entry is editable, so a typed path must become the chosen folder
+        # and must stop being overwritten by the placeholder on a locale change.
+        self.path_var.trace_add("write", self._on_path_edited)
         tk.Entry(topbar, textvariable=self.path_var, bg=SURFACE2, fg=TEXT,
                  insertbackground=TEXT, relief="flat", font=("Segoe UI", 10)
                  ).pack(side="left", fill="x", expand=True, ipady=5, padx=(0, 8))
@@ -198,9 +201,18 @@ class StrucnodeApp(tk.Tk):
             self._nodal_editor.refresh_palette()
 
     # ---------------------------------------------------------------- scan --
+    def _on_path_edited(self, *_args):
+        value = self.path_var.get()
+        if value and not (i18n.is_bound(self.path_var) and value == t("no_folder")):
+            i18n.untr(self.path_var)
+            self._folder = value
+        elif not value:
+            self._folder = None
+
     def _pick_folder(self):
         folder = filedialog.askdirectory(title=t("choose_folder"))
         if folder:
+            self._folder = folder
             set_raw(self.path_var, folder)
             self.settings["last_folder"] = folder
             config.save_settings(self.settings)
@@ -208,8 +220,11 @@ class StrucnodeApp(tk.Tk):
             self._scan()
 
     def _scan(self):
-        folder = self.path_var.get()
-        if not folder or folder == t("no_folder"):
+        # The chosen folder is tracked as state; the entry may be showing the
+        # translated placeholder, and comparing against it would break as soon
+        # as the language changed.
+        folder = self._folder
+        if not folder:
             messagebox.showwarning(t("dlg_warning"), t("need_folder"))
             return
         if not os.path.isdir(folder):

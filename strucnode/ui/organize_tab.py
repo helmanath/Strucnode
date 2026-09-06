@@ -548,15 +548,15 @@ class OrganizeTab(tk.Frame):
         tr(tk.Button(btn_frame, 
                   bg=SURFACE2, fg=MUTED, relief="flat",
                   font=("Segoe UI", 9), padx=10, pady=6, cursor="hand2",
-                  command=lambda: pick("skip")), "dup_ignore").pack(side="left", padx=(0, 6))
+                  command=lambda: pick(executor.SKIP)), "dup_ignore").pack(side="left", padx=(0, 6))
         tr(tk.Button(btn_frame, 
                   bg=ORANGE, fg="white", relief="flat",
                   font=("Segoe UI", 9, "bold"), padx=10, pady=6, cursor="hand2",
-                  command=lambda: pick("replace")), "dup_replace").pack(side="left", padx=(0, 6))
+                  command=lambda: pick(executor.REPLACE)), "dup_replace").pack(side="left", padx=(0, 6))
         tr(tk.Button(btn_frame, 
                   bg=PRIMARY, fg="#0f3638", relief="flat",
                   font=("Segoe UI", 9, "bold"), padx=10, pady=6, cursor="hand2",
-                  command=lambda: pick("rename")), "dup_rename").pack(side="left", padx=(0, 6))
+                  command=lambda: pick(executor.RENAME)), "dup_rename").pack(side="left", padx=(0, 6))
         tr(tk.Button(btn_frame, 
                   bg=SURFACE2, fg=TEXT, relief="flat",
                   font=("Segoe UI", 9), padx=10, pady=6, cursor="hand2",

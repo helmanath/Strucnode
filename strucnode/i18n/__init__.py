@@ -146,6 +146,12 @@ def tr_var(var, key: str, **params):
     return var
 
 
+def is_bound(obj) -> bool:
+    """True while *obj* still shows a translation rather than real data."""
+    entry = _bindings.get(id(obj))
+    return entry is not None and entry[0]() is obj
+
+
 def set_raw(var, value: str) -> None:
     """Put a non-translatable value into *var*, dropping any binding it had.
 

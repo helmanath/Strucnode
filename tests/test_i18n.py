@@ -129,3 +129,17 @@ def test_every_metadata_label_key_exists():
 
     en = catalog("en")
     assert not [key for key in FIELD_LABELS.values() if key not in en]
+
+
+def test_is_bound_distinguishes_placeholder_from_data():
+    class FakeVar:
+        value = None
+
+        def set(self, value):
+            self.value = value
+
+    var = FakeVar()
+    i18n.tr_var(var, "no_folder")
+    assert i18n.is_bound(var)
+    i18n.set_raw(var, "/home/photos")
+    assert not i18n.is_bound(var)
