@@ -324,7 +324,7 @@ Correctif : `lambda e=ex: ...` (capture par valeur).
 ### 4.4 Les fichiers non résolus sont copiés dans un dossier nommé `?`
 
 `get_file_field` retourne `"?"` quand un champ n'est pas résolvable
-(`strucnode.py:1338`). `_refresh_ops` (`3576`) calcule bien `ok_ops` en excluant ces
+(`strucnode.py:1339`). `_refresh_ops` (`3576`) calcule bien `ok_ops` en excluant ces
 opérations… **et ne s'en sert jamais**. `_run` (`3617`) exécute `self._ops`, qui
 contient tout.
 
@@ -411,7 +411,7 @@ de destination (`os.path.commonpath`).
 | Parcours disque | `os.walk` + un `os.stat` par fichier (`4413`) | `os.scandir`, qui fournit déjà `stat` via `DirEntry` — gain typique ×2 à ×3 |
 | Analyse non annulable | `_do_scan` (`4410`) va jusqu'au bout | Drapeau d'annulation, comme dans `_do_run` qui le fait déjà bien |
 | Lecture EXIF | Séquentielle, un thread (`4513`) | `ThreadPoolExecutor` — la lecture EXIF est dominée par les E/S, gain ×4 à ×8 |
-| Remplissage du tableau | Insertion de toutes les lignes une à une (`4647`) | Pagination ou insertion par lots ; au-delà de ~20 000 fichiers l'interface se fige |
+| Remplissage du tableau | Insertion de toutes les lignes une à une (`4643`) | Pagination ou insertion par lots ; au-delà de ~20 000 fichiers l'interface se fige |
 | Palette | `refresh_palette` (`1918`) évalue **tous** les champs sur **tous** les fichiers, EXIF compris | Échantillonner (500 fichiers) pour les compteurs indicatifs, calculer en entier à la demande |
 | Panorama 360° | `np.array(pano)` reconstruit à chaque image (`1160`) | Mettre le tableau NumPy en cache à côté de l'objet PIL |
 | Aperçus | Aucun cache de miniatures | Cache LRU disque dans `~/.strucnode/cache`, indexé sur `(chemin, mtime, taille)` |
