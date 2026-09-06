@@ -10,8 +10,8 @@ import shutil
 import threading
 from dataclasses import dataclass, field
 
-from . import dedupe
 from .. import config
+from . import dedupe
 
 log = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "strucnode"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Desktop application for file analysis, metadata inspection, media preview, and node-based file organization."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,47 @@ media = [
   "sounddevice>=0.4.6",
   "moviepy>=1.0.3",
 ]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+
+[project.gui-scripts]
+strucnode = "strucnode.app:main"
 
 [tool.setuptools]
-py-modules = ["strucnode"]
+packages = [
+  "strucnode",
+  "strucnode.core",
+  "strucnode.i18n",
+  "strucnode.media",
+  "strucnode.ui",
+  "strucnode.ui.nodes",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "strucnode.__version__"}
+
+[tool.setuptools.package-data]
+"strucnode.i18n" = ["locales/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP", "SIM", "I"]
+ignore = [
+  "E501",    # long lines survive from the original layout
+  "E701",    # several statements on one line, ditto
+  "E702",
+  "SIM105",  # contextlib.suppress is not clearer in the Tk callbacks
+  "SIM108",  # ternaries do not always read better here
+  "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]

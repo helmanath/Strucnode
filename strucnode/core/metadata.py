@@ -37,7 +37,7 @@ FIELD_LABELS: dict[str, str] = {
 FILTER_FIELDS: tuple[str, ...] = ("iso", "focal_length", "model", "aperture")
 
 _MAX_CACHE = 20_000
-_cache: "OrderedDict[tuple, ExifData]" = OrderedDict()
+_cache: OrderedDict[tuple, ExifData] = OrderedDict()
 
 _DATE_TAGS_EXIFREAD = ("EXIF DateTimeOriginal", "EXIF DateTimeDigitized", "Image DateTime")
 _DATE_TAGS_PIL = ("DateTimeOriginal", "DateTimeDigitized", "DateTime")

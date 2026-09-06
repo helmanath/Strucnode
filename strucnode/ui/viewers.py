@@ -9,10 +9,10 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from ..core.categories import RAW_EXTS
 from ..i18n import t
 from ..media.images import open_raw_thumbnail
 from ..media.video import VideoPlayer
-from ..core.categories import RAW_EXTS
 from ..theme import BORDER, MUTED, ORANGE, SUCCESS, SURFACE2, TEXT
 
 log = logging.getLogger(__name__)
@@ -152,9 +152,10 @@ class FullscreenViewer(tk.Toplevel):
         try:
             if self._is_raw:
                 img = open_raw_thumbnail(self.filepath)
-                if img is None: raise RuntimeError("Impossible de decoder ce fichier RAW.\nInstallez : pip install rawpy exifread")
+                if img is None: raise RuntimeError(t("raw_decode_failed"))
             else:
-                from PIL import Image; img = Image.open(self.filepath)
+                from PIL import Image
+                img = Image.open(self.filepath)
             self._orig = img; self.after(0, self._fit_and_draw)
         except Exception as exc: self.after(0, lambda e=exc: messagebox.showerror(t("error"), str(e), parent=self))
 
@@ -249,7 +250,8 @@ class Viewer360(tk.Toplevel):
     def _render(self):
         if not self._pano: self._rendering=False; return
         try:
-            from PIL import Image; import numpy as np
+            import numpy as np
+            from PIL import Image
             self.update_idletasks(); cw,ch=self.canvas.winfo_width(),self.canvas.winfo_height()
             if cw<2 or ch<2: self._rendering=False; return
             rw=min(cw,1280); rh=int(rw*ch/cw); pano=self._pano; pw,ph=pano.size; pa=np.array(pano)

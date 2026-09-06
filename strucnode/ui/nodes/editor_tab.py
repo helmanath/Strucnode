@@ -8,12 +8,31 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from ...core import fields
-from ...core.tree import (arg_token, build_tree, count_files, dyn_arg_part,
-                          dyn_folder_token, dyn_literal_part, folder_token)
+from ...core.tree import (
+    arg_token,
+    build_tree,
+    count_files,
+    dyn_arg_part,
+    dyn_folder_token,
+    dyn_literal_part,
+    folder_token,
+)
 from ...i18n import set_raw, t, tr, tr_var
-from ...theme import (BG, BORDER, COLOR_ARGUMENT, COLOR_FOLDER, COLOR_LIANT,
-                      MUTED, ORANGE, PRIMARY, PRIMARY_H, SUCCESS, SURFACE,
-                      SURFACE2, TEXT)
+from ...theme import (
+    BG,
+    BORDER,
+    COLOR_ARGUMENT,
+    COLOR_FOLDER,
+    COLOR_LIANT,
+    MUTED,
+    ORANGE,
+    PRIMARY,
+    PRIMARY_H,
+    SUCCESS,
+    SURFACE,
+    SURFACE2,
+    TEXT,
+)
 from .node import Node
 from .presets import PresetStore
 
@@ -32,8 +51,8 @@ class NodeEditorTab(tk.Frame):
         self._drag_node      = None
         self._drag_offset    = (0, 0)
         self._selected_nodes = set()
-        self._rubber_start   = None   # (x, y) départ du rubber-band
-        self._rubber_rect    = None   # canvas id du rect de sélection
+        self._rubber_start   = None   # (x, y) where the rubber band started
+        self._rubber_rect    = None   # canvas id of the selection rectangle
         self._wire_src       = None   # (nid, port_type)  port_type = "chain"|"attr"
         self._wire_tmp       = None
         self._pan_start       = None
@@ -44,7 +63,7 @@ class NodeEditorTab(tk.Frame):
         self._last_labels    = []
         self._uv_cache       = {}
         self._preset_dirty = False
-        self._preset_name_var = None  # sera créé dans _build_ui
+        self._preset_name_var = None  # created by _build_ui
         self._presets = PresetStore()
         self._build_ui()
         self.after(200, self._load_last_preset)
@@ -78,7 +97,7 @@ class NodeEditorTab(tk.Frame):
         pbar.pack(side="right", fill="y")
 
         def pbtn(text, fg, cmd, padx_in=8, bold=False):
-            """Crée un bouton preset uniforme dans pbar."""
+            """Build one uniformly styled preset button in the preset bar."""
             f = ("Segoe UI", 9, "bold") if bold else ("Segoe UI", 9)
             return tk.Button(pbar, text=text, bg=SURFACE2, fg=fg,
                              relief="flat", font=f,
@@ -240,7 +259,7 @@ class NodeEditorTab(tk.Frame):
         self._nodal_prog_inner.place(x=0, y=0, relwidth=0.0, height=4)
         self._nodal_prog_var.trace_add("write", self._update_nodal_prog_bar)
     def _pal_yscroll_cb(self, first, last):
-        """Callback yscrollcommand : transmet à la scrollbar et la masque si inutile."""
+        """yscrollcommand handler: forward to the scrollbar and hide it when unused."""
         if hasattr(self, "_pal_scrollbar"):
             self._pal_scrollbar.set(first, last)
 
@@ -368,7 +387,7 @@ class NodeEditorTab(tk.Frame):
         btn.bind("<ButtonRelease-1>", on_release, add="+")
 
     def _bind_palette_dnd_folder(self, btn):
-        """Drag & drop pour créer un node folder."""
+        """Drag a folder node from the palette onto the canvas."""
         _state = {"dragging": False, "ghost": None}
 
         def on_press(e):
@@ -419,7 +438,7 @@ class NodeEditorTab(tk.Frame):
         btn.bind("<ButtonRelease-1>", on_release, add="+")
 
     def _bind_palette_dnd_liant(self, btn):
-        """Drag & drop pour créer un node liant."""
+        """Drag a connector node from the palette onto the canvas."""
         _state = {"dragging": False, "ghost": None}
 
         def on_press(e):
@@ -549,7 +568,6 @@ class NodeEditorTab(tk.Frame):
             self._delete_node(nid)
         self._selected_nodes.clear()
         self._update_status()
-    _PRESETS_DIR = None  # répertoire de stockage des presets
 
     # Preset storage lives in presets.PresetStore; these thin wrappers keep the
     # call sites in this class readable.
@@ -563,13 +581,13 @@ class NodeEditorTab(tk.Frame):
         self._presets.set_last_name(name)
 
     def _mark_dirty(self):
-        """Le canvas a été modified depuis le dernier loading/save."""
+        """Mark the canvas as changed since the last load or save."""
         self._preset_dirty = True
         if hasattr(self, "_preset_dirty_lbl"):
             self._preset_dirty_lbl.config(text="✦")
 
     def _mark_clean(self, name):
-        """Le preset vient d'être sauvegardé ou chargé : état propre."""
+        """Mark the canvas as clean: the preset was just saved or loaded."""
         self._preset_dirty = False
         set_raw(self._preset_name_var, name)
         if hasattr(self, "_preset_dirty_lbl"):
@@ -590,7 +608,7 @@ class NodeEditorTab(tk.Frame):
         }
 
     def _apply_preset_data(self, data):
-        """Reconstruit le canvas depuis un dict — NE déclenche PAS _mark_dirty."""
+        """Rebuild the canvas from a preset dict. Does NOT mark it dirty."""
         self._canvas.delete("all")
         self._nodes.clear()
         self._connections.clear()
@@ -692,9 +710,11 @@ class NodeEditorTab(tk.Frame):
         py = self.winfo_rooty() + self.winfo_height()//2 - win.winfo_height()//2
         win.geometry(f"+{px}+{py}")
     def _refresh_preset_combo(self):
-        """Resynchronise la combobox avec l'état réel (files + preset chargé).
-        combo_var contient TOUJOURS le nom brut sans étoile.
-        L'étoile est gérée par _preset_dirty_lbl."""
+        """Resync the combobox with what is on disk and what is loaded.
+
+        The combo variable always holds the raw preset name; the unsaved-changes
+        star is shown by _preset_dirty_lbl, never folded into the name.
+        """
         if not hasattr(self, "_preset_combo"):
             return
         presets = self._list_presets()
@@ -790,7 +810,7 @@ class NodeEditorTab(tk.Frame):
             log.warning("cannot restore preset %r", name, exc_info=True)
             self._refresh_preset_combo()
     def _new_preset(self):
-        """Réinitialise le canvas pour créer un nouveau preset."""
+        """Clear the canvas so the user can start a new preset."""
         if self._preset_dirty:
             cur = self._preset_name_var.get().strip()
             label = f'"{cur}"' if cur and cur != t("no_preset") else t("current_preset")
@@ -998,15 +1018,14 @@ class NodeEditorTab(tk.Frame):
                             self._connections.append(conn)
                         self._redraw_wires(); break
 
-                elif ptype == "name_in":
-                    if n.hit_port_out(mx, my):
-                        if n.node_family not in ("argument", "liant"):
-                            break
-                        conn = {"src": nid, "dst": src_nid, "ctype": "name_in", "cid": None}
-                        if not any(c["ctype"] == "name_in" and c["dst"] == src_nid
-                                   for c in self._connections):
-                            self._connections.append(conn)
-                        self._redraw_wires(); break
+                elif ptype == "name_in" and n.hit_port_out(mx, my):
+                    if n.node_family not in ("argument", "liant"):
+                        break
+                    conn = {"src": nid, "dst": src_nid, "ctype": "name_in", "cid": None}
+                    if not any(c["ctype"] == "name_in" and c["dst"] == src_nid
+                               for c in self._connections):
+                        self._connections.append(conn)
+                    self._redraw_wires(); break
 
             if self._wire_tmp:
                 self._canvas.delete(self._wire_tmp); self._wire_tmp = None
@@ -1110,7 +1129,7 @@ class NodeEditorTab(tk.Frame):
             if v:
                 self._mark_dirty()
                 n.label = v
-                n._label_is_default = False  # l'utilisateur a personnalisé le nom
+                n._label_is_default = False  # the user named this folder
             win.destroy()
         entry.bind("<Return>", confirm)
         tr(tk.Button(win, bg=PRIMARY, fg="#0f3638", relief="flat",
@@ -1118,7 +1137,7 @@ class NodeEditorTab(tk.Frame):
                   cursor="hand2", command=confirm), "ok").pack(pady=10)
 
     def _open_liant_dialog(self, nid):
-        """Popup pour éditer le texte libre d'un node Liant."""
+        """Dialog for editing the free text of a connector node."""
         if self._rename_win and self._rename_win.winfo_exists():
             self._rename_win.destroy()
         n = self._nodes[nid]
@@ -1149,7 +1168,7 @@ class NodeEditorTab(tk.Frame):
                   cursor="hand2", command=confirm), "ok").pack(pady=8)
 
     def _open_separator_dialog(self, nid):
-        """Popup de configuration du séparateur pour un node Argument."""
+        """Dialog for choosing the separator appended after an argument node."""
         if self._rename_win and self._rename_win.winfo_exists():
             self._rename_win.destroy()
         n = self._nodes[nid]
@@ -1224,8 +1243,11 @@ class NodeEditorTab(tk.Frame):
                 t("node_count_status", n=len(self._nodes), f=folders, m=metadata)
                 + t("node_conn_status", nc=nc, sel=sel_txt))
     def _resolve_chain(self):
-        """Retourne la liste ordonnée des nids dans la chaîne principale.
-        Exclut les nodes argument/liant qui font partie d'une chaîne de nom (port NOM)."""
+        """Return the ordered node ids of the main chain.
+
+        Argument and connector nodes wired into a folder's NAME port belong to
+        that folder's name, not to the chain, so they are excluded here.
+        """
         if not self._nodes: return []
         name_chain_nodes = set()
         direct_name_srcs = set(c["src"] for c in self._connections if c["ctype"] == "name_in"
@@ -1277,8 +1299,8 @@ class NodeEditorTab(tk.Frame):
 
     def _get_name_chain_for_folder(self, folder_nid):
         """
-        Retourne la liste ORDONNÉE des nids argument/liant connectés au port NOM
-        du dossier donné, en suivant la chaîne chain entre ces nodes.
+        Return the ORDERED node ids wired into the folder's NAME port,
+        following the chain links between those nodes.
         """
         name_in_srcs = [c["src"] for c in self._connections
                         if c["ctype"] == "name_in" and c["dst"] == folder_nid
@@ -1312,7 +1334,7 @@ class NodeEditorTab(tk.Frame):
         return chain
 
     def get_structure(self):
-        """Expose l'arbre résolu pour l'tab Organiser."""
+        """Expose the resolved tree to the Organize tab."""
         files = self._get_files()
         if not files: return None
         return self.get_structure_for_files(files)

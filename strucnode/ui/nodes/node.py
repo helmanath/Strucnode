@@ -12,6 +12,7 @@ from ...core import fields
 from ...i18n import t
 from ...theme import COLOR_ARGUMENT, COLOR_FOLDER, COLOR_LIANT, MUTED, SURFACE, SURFACE2, TEXT
 
+
 class Node:
     """Visual graph node used by the node editor canvas."""
 
@@ -22,7 +23,7 @@ class Node:
         self.canvas      = canvas
         self.id          = node_id
         self.node_family = node_family   # "argument" | "liant" | "folder"
-        self.type_key    = type_key      # clé NODE_TYPES pour "argument", None sinon
+        self.type_key    = type_key      # field key for "argument" nodes, else None
         self.x, self.y   = x, y
         if node_family == "argument":
             self._label = label_override or (fields.label(type_key) if type_key else "Argument")

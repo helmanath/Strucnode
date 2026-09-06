@@ -13,7 +13,6 @@ import subprocess
 import threading
 import time
 
-
 from ..i18n import t
 from ..theme import DANGER, MUTED
 
@@ -285,8 +284,8 @@ class VideoPlayer:
         threading.Thread(target=self._load_audio, args=(path,), daemon=True).start()
 
     def _raw_to_tk(self, raw_bytes, w, h):
-        from PIL import Image, ImageTk
         import numpy as np
+        from PIL import Image, ImageTk
         arr = np.frombuffer(raw_bytes, dtype=np.uint8).reshape((h, w, 3))
         return ImageTk.PhotoImage(Image.fromarray(arr))
 
@@ -398,7 +397,7 @@ class VideoPlayer:
             self.canvas.create_image((self.w-tw)//2, (self.h-th)//2,
                                       anchor="nw", image=tk_img, tags="video_frame")
         except Exception:
-            pass  # Canvas was destroyed (fenêtre fermée pendant la lecture)
+            pass  # canvas destroyed: the window closed during playback
 
     # Audio extraction also uses a layered fallback strategy: MoviePy first, FFmpeg pipe second.
     def _load_audio(self, path):
@@ -431,7 +430,8 @@ class VideoPlayer:
         if not self._has_audio or self._muted or self._audio_frames is None: return
         self._stop_audio()
         try:
-            import sounddevice as sd, numpy as np
+            import numpy as np
+            import sounddevice as sd
             frames = self._audio_frames; sr = self._audio_sr; player = self
             def callback(outdata, frame_count, time_info, status):
                 pos = player._audio_pos; end = pos + frame_count
@@ -467,5 +467,5 @@ class VideoPlayer:
     def _show_error(self, msg):
         self.canvas.delete("all")
         self.canvas.create_rectangle(0,0,self.w,self.h, fill="#1a0a0c", outline="")
-        self.canvas.create_text(self.w//2, self.h//2, text=f"Erreur :\n{msg}",
+        self.canvas.create_text(self.w//2, self.h//2, text=t("video_error", msg=msg),
             fill="#dd6974", font=("Segoe UI",8), justify="center", width=self.w-20)
