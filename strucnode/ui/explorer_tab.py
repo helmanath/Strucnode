@@ -84,6 +84,9 @@ class ExplorerTab(tk.Frame):
         self._current_is_raw = False
         self._preview_img = None
         self._muted = False
+        # Declared before _build_ui(): it wires callbacks such as
+        # _update_seek_bar that read the player before it can exist.
+        self._video_player = None
         self._build_ui()
         self._video_player = VideoPlayer(self.preview_canvas, PREVIEW_W, PREVIEW_H)
 

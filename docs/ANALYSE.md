@@ -612,9 +612,25 @@ Volontairement laissé de côté, par ordre de valeur :
 ### Vérification
 
 Le conteneur utilisé pour ce travail n'a ni Tkinter ni Pillow : **l'application
-n'a pas pu être lancée**. Ce qui a été vérifié : `ruff` sans avertissement, 384
-tests verts, l'import de chacun des 22 modules (UI comprise, via un stub Tk), et
-un contrôle statique confirmant qu'aucun attribut `self.x` lu n'est laissé sans
-définition. Un essai à l'écran reste nécessaire avant publication, en particulier
-sur le glisser-déposer de la palette et le lecteur vidéo, que les tests ne
-couvrent pas.
+n'y a jamais été lancée**. Le premier essai sur une vraie machine a d'ailleurs
+révélé un crash au démarrage — `ExplorerTab._build_ui()` lisait
+`self._video_player` avant que `__init__` ne l'affecte.
+
+Le filet de sécurité a été refait en conséquence. Le stub Tkinter de
+`tests/tk_stub.py` était trop permissif : il répondait à *n'importe quel*
+attribut par un objet factice, ce qui masquait exactement ce genre d'erreur. Il
+est maintenant strict — un attribut commençant par `_` qui n'a pas été affecté
+lève `AttributeError`, comme le ferait le vrai Tk — et `tests/test_construction.py`
+**construit réellement** chaque vue (les trois onglets, la fenêtre principale, les
+visionneuses plein écran) au lieu de se contenter de les importer. Le test a été
+validé en réintroduisant le bug : il échoue avec le message exact remonté par
+l'utilisateur.
+
+Ce qui est vérifié aujourd'hui : `ruff` sans avertissement, **408 tests** verts,
+la construction de chaque vue, un aller-retour complet éditeur nodal → plan →
+exécution sur de vrais fichiers temporaires, et le changement de langue appliqué
+à toutes les vues construites.
+
+Ce qui ne l'est pas et demande encore un œil humain : le rendu visuel, le
+glisser-déposer de la palette (les événements souris ne sont pas simulés), la
+lecture vidéo et la visionneuse 360° avec de vrais médias.
