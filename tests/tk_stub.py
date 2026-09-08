@@ -10,6 +10,12 @@ the application's own state and must have been assigned, otherwise the lookup
 raises ``AttributeError`` exactly as real Tk would. Public names are treated as
 Tk API and answered with a no-op, since the widget toolkit itself is not what
 these tests are checking.
+
+The stub is installed unconditionally by ``conftest.py``, even where real
+Tkinter is importable. A CI runner has Tkinter but no display, so deferring to
+the real one there means every widget test dies on ``TclError: no display
+name``. Building against the stub keeps the suite identical on a developer
+machine, on Windows and on CI.
 """
 
 from __future__ import annotations
@@ -195,15 +201,25 @@ class _Combobox(_Widget):
     def set(self, value): pass
 
 
+_MARKER = "__strucnode_tk_stub__"
+
+
+def is_installed() -> bool:
+    """True when ``sys.modules["tkinter"]`` is this stub."""
+    return getattr(sys.modules.get("tkinter"), _MARKER, False)
+
+
 def install() -> None:
-    """Register the stub under ``tkinter`` when the real one is unavailable."""
-    try:
-        import tkinter  # noqa: F401
+    """Register the stub under ``tkinter``, replacing the real one if present.
+
+    Idempotent: calling it again once installed does nothing, so test modules
+    can call it at import time without fighting ``conftest.py``.
+    """
+    if is_installed():
         return
-    except ImportError:
-        pass
 
     tkinter = types.ModuleType("tkinter")
+    setattr(tkinter, _MARKER, True)
     for name in ("Tk", "Toplevel", "Frame", "Label", "Button", "Entry",
                  "Checkbutton", "Radiobutton", "Listbox", "LabelFrame",
                  "Menubutton", "Scale", "Text", "Widget", "Misc"):

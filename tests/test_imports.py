@@ -37,3 +37,24 @@ MODULES = [
 @pytest.mark.parametrize("name", MODULES)
 def test_module_imports(name):
     importlib.import_module(name)
+
+
+def test_the_stub_is_active_even_where_real_tkinter_exists():
+    """CI has Tkinter but no display.
+
+    Letting the real one win there made every widget test die with
+    "TclError: no display name". conftest installs the stub unconditionally;
+    this asserts it actually took effect.
+    """
+    import tkinter
+
+    assert tk_stub.is_installed()
+    assert getattr(tkinter, "__strucnode_tk_stub__", False)
+
+
+def test_installing_the_stub_twice_is_a_no_op():
+    import tkinter
+
+    before = tkinter.Frame
+    tk_stub.install()
+    assert tkinter.Frame is before
