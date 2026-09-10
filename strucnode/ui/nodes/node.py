@@ -10,14 +10,37 @@ from __future__ import annotations
 
 from ...core import fields
 from ...i18n import t
-from ...theme import COLOR_ARGUMENT, COLOR_FOLDER, COLOR_LIANT, MUTED, SURFACE, SURFACE2, TEXT
+from ...theme import (
+    CANVAS_BG,
+    COLOR_ARGUMENT,
+    COLOR_FOLDER,
+    COLOR_LIANT,
+    NODE_SELECTED,
+    NODE_SHADOW_FAR,
+    NODE_SHADOW_NEAR,
+    ON_ACCENT,
+    SIZE_MICRO,
+    SIZE_SMALL,
+    SURFACE,
+    SURFACE2,
+    TEXT,
+    TEXT_DIM,
+    font,
+    rounded_rect,
+)
 
 
 class Node:
     """Visual graph node used by the node editor canvas."""
 
-    NW, NH = 200, 90
+    #: The unzoomed size of a node. ``NW``/``NH`` are scaled by the editor's
+    #: zoom, so the base values have to survive somewhere to reset the view.
+    BASE_NW, BASE_NH = 210, 96
+    NW, NH = BASE_NW, BASE_NH
     PORT_R = 7
+    #: Corner radius of the card. Kept in one place because the header has to
+    #: be clipped to the same curve for the two shapes to line up.
+    RADIUS = 10
 
     def __init__(self, canvas, node_id, node_family, type_key, x, y, label_override=None):
         self.canvas      = canvas
@@ -89,17 +112,35 @@ class Node:
             self.canvas.delete(cid)
         self.canvas_ids.clear()
         x, y, w, h = self.x, self.y, self.NW, self.NH
+        r        = self.RADIUS
         c        = self.color
-        bw       = 3 if self._selected else 2
+        head_h   = 26
+        bw       = 2 if self._selected else 1
         out      = TEXT if self._selected else c
-        sel_fill = "#252320" if self._selected else SURFACE2
+        sel_fill = NODE_SELECTED if self._selected else SURFACE2
 
-        shadow  = self.canvas.create_rectangle(x+4, y+4, x+w+4, y+h+4,
-                      fill="#0d0c0b", outline="", tags=f"node_{self.id}")
-        body    = self.canvas.create_rectangle(x, y, x+w, y+h,
-                      fill=sel_fill, outline=out, width=bw, tags=f"node_{self.id}")
-        header  = self.canvas.create_rectangle(x+bw, y+bw, x+w-bw, y+25,
-                      fill=c, outline="", tags=f"node_{self.id}")
+        # Two offset shadows rather than one: the softer, wider pass is what
+        # lifts the card off the grid instead of merely doubling its outline.
+        shadow2 = rounded_rect(self.canvas, x + 3, y + 5, x + w + 5, y + h + 7,
+                               radius=r, fill=NODE_SHADOW_FAR, outline="",
+                               tags=f"node_{self.id}")
+        shadow = rounded_rect(self.canvas, x + 2, y + 3, x + w + 2, y + h + 3,
+                              radius=r, fill=NODE_SHADOW_NEAR, outline="",
+                              tags=f"node_{self.id}")
+        body = rounded_rect(self.canvas, x, y, x + w, y + h, radius=r,
+                            fill=sel_fill, outline=out, width=bw,
+                            tags=f"node_{self.id}")
+        # The header shares the card's top corners and is square at the
+        # bottom, so it reads as a band of the card rather than a pill on it.
+        header = rounded_rect(self.canvas, x + bw, y + bw, x + w - bw,
+                              y + head_h + r, radius=r, fill=c, outline="",
+                              tags=f"node_{self.id}")
+        header_foot = self.canvas.create_rectangle(
+            x + bw, y + head_h - 1, x + w - bw, y + head_h,
+            fill=c, outline="", tags=f"node_{self.id}")
+        header_mask = self.canvas.create_rectangle(
+            x + bw, y + head_h, x + w - bw, y + head_h + r + 2,
+            fill=sel_fill, outline="", tags=f"node_{self.id}")
 
         if self.node_family == "folder":
             icon = "📁"; badge = t("node_badge_folder"); bcol = COLOR_FOLDER
@@ -108,9 +149,9 @@ class Node:
         else:
             icon = "📌"; badge = t("node_badge_arg");    bcol = COLOR_ARGUMENT
         display_label = self.display_label
-        title = self.canvas.create_text(x + w//2, y + 14,
-                    text=f"{icon}  {display_label}",
-                    fill="#0f1a1c", font=("Segoe UI", 8, "bold"),
+        title = self.canvas.create_text(x + 12, y + head_h // 2 + 1,
+                    text=f"{icon}  {display_label}", anchor="w",
+                    fill=ON_ACCENT, font=font(SIZE_SMALL, "bold"),
                     tags=f"node_{self.id}")
 
         if self.node_family == "folder":
@@ -124,18 +165,24 @@ class Node:
             sub_text  = t("node_field", f=fields.resolver_of(self.type_key))
             hint_text = t("node_sep", s=sep_disp)
 
-        sub_t  = self.canvas.create_text(x + w//2, y + 48,
-                     text=sub_text, fill=MUTED, font=("Segoe UI", 7),
+        sub_t  = self.canvas.create_text(x + w // 2, y + head_h + 20,
+                     text=sub_text, fill=TEXT_DIM, font=font(SIZE_MICRO),
                      tags=f"node_{self.id}")
-        hint_t = self.canvas.create_text(x + w//2, y + 63,
-                     text=hint_text, fill=c, font=("Segoe UI", 6, "bold"),
+        hint_t = self.canvas.create_text(x + w // 2, y + head_h + 38,
+                     text=hint_text, fill=c, font=font(SIZE_MICRO, "bold"),
                      tags=f"node_{self.id}")
-        del_b  = self.canvas.create_text(x + w - 10, y + 14,
-                     text="✕", fill="#0f1a1c", font=("Segoe UI", 8, "bold"),
+        del_b  = self.canvas.create_text(x + w - 12, y + head_h // 2 + 1,
+                     text="✕", fill=ON_ACCENT, font=font(SIZE_SMALL, "bold"),
                      tags=(f"node_{self.id}", f"del_{self.id}"))
-        badge_t = self.canvas.create_text(x + 8, y + h - 10,
-                     text=badge, fill=bcol,
-                     font=("Segoe UI", 6, "bold"), anchor="w",
+        # A filled chip rather than loose text: the family of a node is the
+        # first thing one reads when scanning a graph, so it gets a shape.
+        badge_w = 9 + 7 * len(badge)
+        badge_bg = rounded_rect(self.canvas, x + 9, y + h - 20,
+                                x + 9 + badge_w, y + h - 6, radius=6,
+                                fill=CANVAS_BG, outline=bcol, width=1,
+                                tags=f"node_{self.id}")
+        badge_t = self.canvas.create_text(x + 9 + badge_w // 2, y + h - 13,
+                     text=badge, fill=bcol, font=font(SIZE_MICRO, "bold"),
                      tags=f"node_{self.id}")
 
         port_in  = self.canvas.create_oval(
@@ -150,7 +197,8 @@ class Node:
             tags=(f"node_{self.id}", f"port_out_{self.id}"))
 
         self.canvas_ids = [cid for cid in
-            [shadow, body, header, title, sub_t, hint_t, del_b, badge_t, port_in, port_out]
+            [shadow2, shadow, body, header, header_foot, header_mask, title,
+             sub_t, hint_t, del_b, badge_bg, badge_t, port_in, port_out]
             if cid is not None]
 
         if self.node_family == "folder":
@@ -160,8 +208,8 @@ class Node:
                 x + w//2,     y + h + 13,
                 fill=SURFACE2, outline=COLOR_LIANT, width=2,
                 tags=(f"node_{self.id}", f"port_name_in_{self.id}"))
-            lbl_nom = self.canvas.create_text(x + w//2, y + h + 22,
-                text=t("node_nom"), fill=COLOR_LIANT, font=("Segoe UI", 6, "bold"),
+            lbl_nom = self.canvas.create_text(x + w//2, y + h + 24,
+                text=t("node_nom"), fill=COLOR_LIANT, font=font(SIZE_MICRO, "bold"),
                 tags=f"node_{self.id}")
             self.canvas_ids += [port_name_in, lbl_nom]
 
@@ -184,8 +232,8 @@ class Node:
         return self.x <= mx <= self.x + self.NW and self.y <= my <= self.y + self.NH + extra
 
     def hit_delete(self, mx, my):
-        dx, dy = self.x + self.NW - 10, self.y + 14
-        return abs(mx - dx) < 10 and abs(my - dy) < 10
+        dx, dy = self.x + self.NW - 12, self.y + 14
+        return abs(mx - dx) < 11 and abs(my - dy) < 11
 
     def hit_port_out(self, mx, my):
         px, py = self.port_out_pos()

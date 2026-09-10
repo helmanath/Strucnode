@@ -12,7 +12,30 @@ from . import config, i18n
 from .core.categories import fmt_size
 from .core.scanner import scan
 from .i18n import available_locales, set_raw, t, tr, tr_var
-from .theme import BG, MUTED, PRIMARY, PRIMARY_H, SURFACE, SURFACE2, TEXT, apply_styles
+from .theme import (
+    BG,
+    BORDER,
+    BORDER_SOFT,
+    MUTED,
+    ON_ACCENT,
+    ORANGE,
+    PRIMARY,
+    SIZE_BODY,
+    SIZE_MICRO,
+    SIZE_SMALL,
+    SIZE_TITLE,
+    SP_M,
+    SP_S,
+    SURFACE,
+    SURFACE2,
+    SURFACE3,
+    TEXT,
+    TEXT_DIM,
+    Tooltip,
+    apply_styles,
+    button,
+    font,
+)
 from .ui.explorer_tab import ExplorerTab
 from .ui.nodes.editor_tab import NodeEditorTab
 from .ui.organize_tab import OrganizeTab
@@ -25,6 +48,9 @@ LANGUAGE_FLAGS = {"en": "🇬🇧", "fr": "🇫🇷"}
 TABS = (("explorer", "tab_explorer"), ("nodal", "tab_nodal"),
         ("organize", "tab_organize"))
 LOCKED_TABS = ("nodal", "organize")
+
+#: Height of the strip that marks the active tab.
+TAB_INDICATOR_H = 3
 
 
 class StrucnodeApp(tk.Tk):
@@ -49,6 +75,7 @@ class StrucnodeApp(tk.Tk):
         self._organize_tab = None
         self._lang_buttons: dict[str, tk.Button] = {}
         self._tab_btns: dict[str, tk.Button] = {}
+        self._tab_indicators: dict[str, tk.Frame] = {}
         self._tab_frames: dict[str, tk.Frame] = {}
 
         self._build_ui()
@@ -59,13 +86,29 @@ class StrucnodeApp(tk.Tk):
     # ------------------------------------------------------------------ UI --
     def _build_ui(self):
         apply_styles(self)
+        self._build_topbar()
+        self._build_tab_bar()
 
-        topbar = tk.Frame(self, bg=SURFACE, pady=8, padx=16)
+        self._content = tk.Frame(self, bg=BG)
+        self._content.pack(fill="both", expand=True)
+        self.explorer = ExplorerTab(self._content, on_scan_done=self._on_scan_done)
+        self._tab_frames["explorer"] = self.explorer
+        for key in LOCKED_TABS:
+            self._tab_frames[key] = tk.Frame(self._content, bg=BG)
+
+        self._build_status_bar()
+        self._switch_tab("explorer")
+
+    def _build_topbar(self):
+        """Brand, the folder being worked on, and the two actions on it."""
+        topbar = tk.Frame(self, bg=SURFACE, pady=SP_M, padx=SP_M + SP_S)
         topbar.pack(fill="x")
+        tk.Frame(self, bg=BORDER_SOFT, height=1).pack(fill="x")
+
         tk.Label(topbar, text="📁", bg=SURFACE, fg=PRIMARY,
-                 font=("Segoe UI", 18)).pack(side="left")
-        tr(tk.Label(topbar, bg=SURFACE, fg=TEXT, font=("Segoe UI", 13, "bold")),
-           "app_title").pack(side="left", padx=(6, 20))
+                 font=font(18)).pack(side="left")
+        tr(tk.Label(topbar, bg=SURFACE, fg=TEXT, font=font(SIZE_TITLE, "bold")),
+           "app_title").pack(side="left", padx=(SP_S + 2, SP_M * 2))
 
         self.path_var = tk.StringVar()
         if self._folder:
@@ -75,63 +118,87 @@ class StrucnodeApp(tk.Tk):
         # The entry is editable, so a typed path must become the chosen folder
         # and must stop being overwritten by the placeholder on a locale change.
         self.path_var.trace_add("write", self._on_path_edited)
-        tk.Entry(topbar, textvariable=self.path_var, bg=SURFACE2, fg=TEXT,
-                 insertbackground=TEXT, relief="flat", font=("Segoe UI", 10)
-                 ).pack(side="left", fill="x", expand=True, ipady=5, padx=(0, 8))
 
-        tr(tk.Button(topbar, bg=PRIMARY, fg="#0f3638", activebackground=PRIMARY_H,
-                     activeforeground="#0f3638", relief="flat",
-                     font=("Segoe UI", 10, "bold"), padx=12, pady=5,
-                     cursor="hand2", command=self._pick_folder),
-           "choose_folder").pack(side="left")
-        self.scan_btn = tr(tk.Button(topbar, bg=SURFACE2, fg=TEXT, relief="flat",
-                                     font=("Segoe UI", 10), padx=12, pady=5,
-                                     cursor="hand2", command=self._scan),
-                           "analyze")
-        self.scan_btn.pack(side="left", padx=(8, 0))
+        # A one-pixel frame around the entry gives the field a visible outline
+        # that lights up on focus; a flat tk.Entry alone reads as a plain label.
+        field = tk.Frame(topbar, bg=BORDER)
+        field.pack(side="left", fill="x", expand=True, padx=(0, SP_M))
+        inner = tk.Frame(field, bg=SURFACE2)
+        inner.pack(fill="x", padx=1, pady=1)
+        tk.Label(inner, text="🗀", bg=SURFACE2, fg=MUTED,
+                 font=font(SIZE_BODY)).pack(side="left", padx=(SP_M, 0))
+        entry = tk.Entry(inner, textvariable=self.path_var, bg=SURFACE2, fg=TEXT,
+                         insertbackground=PRIMARY, relief="flat",
+                         highlightthickness=0, font=font(SIZE_BODY))
+        entry.pack(side="left", fill="x", expand=True, ipady=6, padx=SP_M)
+        entry.bind("<Return>", lambda _e: self._scan())
+        entry.bind("<FocusIn>", lambda _e: field.config(bg=PRIMARY))
+        entry.bind("<FocusOut>", lambda _e: field.config(bg=BORDER))
 
-        lang_frame = tk.Frame(topbar, bg=SURFACE)
-        lang_frame.pack(side="right", padx=(4, 8))
+        self.scan_btn = tr(button(topbar, variant="primary", size=SIZE_BODY,
+                                  bold=True, padx=SP_M + 2, pady=6,
+                                  command=self._scan), "analyze")
+        self.scan_btn.pack(side="right")
+        Tooltip(self.scan_btn, lambda: t("tip_analyze"))
+        self._choose_btn = tr(button(topbar, variant="ghost", size=SIZE_BODY,
+                                     padx=SP_M + 2, pady=6,
+                                     command=self._pick_folder), "choose_folder")
+        self._choose_btn.pack(side="right", padx=(0, SP_M))
+
+        lang_frame = tk.Frame(topbar, bg=SURFACE2)
+        lang_frame.pack(side="right", padx=(0, SP_M * 2))
         for code in reversed(available_locales()):
             btn = tk.Button(lang_frame, text=LANGUAGE_FLAGS.get(code, code.upper()),
-                            bg=SURFACE, fg=TEXT, relief="flat",
-                            font=("Segoe UI", 15), cursor="hand2", bd=0,
-                            activebackground=SURFACE2,
+                            bg=SURFACE2, fg=TEXT, relief="flat",
+                            font=font(13), cursor="hand2", bd=0,
+                            highlightthickness=0, padx=SP_S, pady=SP_S,
+                            activebackground=SURFACE3,
                             command=lambda c=code: self._set_language(c))
-            btn.pack(side="right", padx=2)
+            btn.pack(side="right")
             self._lang_buttons[code] = btn
+            Tooltip(btn, lambda c=code: t("tip_language", lang=c.upper()))
 
+    def _build_tab_bar(self):
+        """One button per tab, each with the strip that marks it as active."""
         tab_bar = tk.Frame(self, bg=SURFACE2)
         tab_bar.pack(fill="x")
+        tk.Frame(self, bg=BORDER_SOFT, height=1).pack(fill="x")
+
         for key, label_key in TABS:
-            btn = tr(tk.Button(tab_bar, bg=SURFACE2, fg=MUTED, relief="flat",
-                               font=("Segoe UI", 10), padx=12, pady=8,
-                               cursor="hand2", activebackground=BG,
-                               activeforeground=TEXT,
+            holder = tk.Frame(tab_bar, bg=SURFACE2)
+            holder.pack(side="left")
+            btn = tr(tk.Button(holder, bg=SURFACE2, fg=MUTED, relief="flat",
+                               bd=0, highlightthickness=0, font=font(SIZE_BODY),
+                               padx=SP_M + 4, pady=SP_M + 1, cursor="hand2",
+                               activebackground=BG, activeforeground=TEXT,
                                command=lambda k=key: self._switch_tab(k)), label_key)
-            btn.pack(side="left")
+            btn.pack(fill="x")
+            indicator = tk.Frame(holder, bg=SURFACE2, height=TAB_INDICATOR_H)
+            indicator.pack(fill="x")
             self._tab_btns[key] = btn
+            self._tab_indicators[key] = indicator
+            if key in LOCKED_TABS:
+                Tooltip(btn, lambda k=key: None if self._indexed
+                        else t("tab_locked_tip"))
+
         self._lock_lbl = tr(tk.Label(tab_bar, bg=SURFACE2, fg=MUTED,
-                                     font=("Segoe UI", 8)), "available_after")
-        self._lock_lbl.pack(side="left")
+                                     font=font(SIZE_MICRO)), "available_after")
+        self._lock_lbl.pack(side="left", padx=SP_M)
 
-        self._content = tk.Frame(self, bg=BG)
-        self._content.pack(fill="both", expand=True)
-        self.explorer = ExplorerTab(self._content, on_scan_done=self._on_scan_done)
-        self._tab_frames["explorer"] = self.explorer
-        for key in LOCKED_TABS:
-            self._tab_frames[key] = tk.Frame(self._content, bg=BG)
-
+    def _build_status_bar(self):
+        """The bottom strip: scan progress, then the result of the scan."""
         self.status_var = tk.StringVar()
         tr_var(self.status_var, "status_ready")
         self.progress = ttk.Progressbar(self, mode="indeterminate",
                                         style="Custom.Horizontal.TProgressbar")
-        status_bar = tk.Frame(self, bg=SURFACE, pady=4, padx=14)
+        status_bar = tk.Frame(self, bg=SURFACE, pady=SP_S + 1, padx=SP_M)
         status_bar.pack(fill="x", side="bottom")
-        tk.Label(status_bar, textvariable=self.status_var, bg=SURFACE, fg=TEXT,
-                 font=("Segoe UI", 9)).pack(side="left")
-
-        self._switch_tab("explorer")
+        tk.Frame(self, bg=BORDER_SOFT, height=1).pack(fill="x", side="bottom")
+        self._status_dot = tk.Label(status_bar, text="●", bg=SURFACE, fg=MUTED,
+                                    font=font(SIZE_MICRO))
+        self._status_dot.pack(side="left", padx=(0, SP_S + 2))
+        tk.Label(status_bar, textvariable=self.status_var, bg=SURFACE,
+                 fg=TEXT_DIM, font=font(SIZE_SMALL)).pack(side="left")
 
     # ------------------------------------------------------------ language --
     def _set_language(self, code: str):
@@ -144,8 +211,8 @@ class StrucnodeApp(tk.Tk):
         """Called by the i18n registry after every locale change."""
         active = i18n.get_locale()
         for code, btn in self._lang_buttons.items():
-            btn.config(relief="sunken" if code == active else "flat",
-                       bg=SURFACE2 if code == active else SURFACE)
+            btn.config(bg=PRIMARY if code == active else SURFACE2,
+                       fg=ON_ACCENT if code == active else MUTED)
         self.title(t("window_title_main"))
         self._lock_lbl.config(text="" if self._indexed else t("available_after"))
         self._render_scan_status()
@@ -178,25 +245,32 @@ class StrucnodeApp(tk.Tk):
             self._organize_tab.pack(fill="both", expand=True)
 
     def _highlight_active_tab(self):
+        """Colour, weight *and* an underline: three cues rather than one.
+
+        Colour alone was the only marker, which left the active tab hard to
+        pick out at a glance -- and invisible to anyone reading the interface
+        in greyscale.
+        """
         for key, btn in self._tab_btns.items():
             active = key == self._current_tab
+            locked = key in LOCKED_TABS and not self._indexed
             btn.config(bg=BG if active else SURFACE2,
-                       fg=PRIMARY if active else MUTED,
-                       font=("Segoe UI", 10, "bold" if active else "normal"))
+                       fg=PRIMARY if active else (BORDER if locked else MUTED),
+                       cursor="arrow" if locked else "hand2",
+                       font=font(SIZE_BODY, "bold" if active else "normal"))
+            self._tab_indicators[key].config(bg=PRIMARY if active else SURFACE2)
 
     def _lock_tabs(self):
         self._indexed = False
         self._lock_lbl.config(text=t("indexing"))
-        for key in LOCKED_TABS:
-            self._tab_btns[key].config(fg=MUTED)
+        self._highlight_active_tab()
         if self._current_tab in LOCKED_TABS:
             self._switch_tab("explorer")
 
     def _unlock_tabs(self):
         self._indexed = True
         self._lock_lbl.config(text="")
-        for key in LOCKED_TABS:
-            self._tab_btns[key].config(fg=TEXT)
+        self._highlight_active_tab()
         if self._nodal_editor is not None:
             self._nodal_editor.refresh_palette()
 
@@ -234,6 +308,7 @@ class StrucnodeApp(tk.Tk):
 
         self.explorer.stop_playback()
         self.scan_btn.config(state="disabled")
+        self._status_dot.config(fg=PRIMARY)
         self.progress.pack(fill="x", side="bottom", before=self.winfo_children()[-1])
         self.progress.start(10)
         tr_var(self.status_var, "scan_starting")
@@ -272,6 +347,7 @@ class StrucnodeApp(tk.Tk):
         if result.errors:
             message += t("status_errors", n=result.errors)
         set_raw(self.status_var, message)
+        self._status_dot.config(fg=ORANGE if result.errors else PRIMARY)
 
     def _on_close(self):
         self._scan_cancel.set()
