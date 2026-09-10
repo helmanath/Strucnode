@@ -26,7 +26,10 @@ from ..media.system import open_file
 from ..media.video import VideoPlayer
 from ..theme import (
     BG,
+    BLUE,
     BORDER,
+    BORDER_SOFT,
+    DANGER,
     EXTENSION_COLORS,
     MUTED,
     ORANGE,
@@ -34,10 +37,21 @@ from ..theme import (
     PREVIEW_W,
     PRIMARY,
     PURPLE,
+    SIZE_H1,
+    SIZE_MICRO,
+    SIZE_SMALL,
+    SP_M,
+    SP_S,
+    SP_XS,
     SUCCESS,
     SURFACE,
     SURFACE2,
+    SURFACE3,
     TEXT,
+    TEXT_DIM,
+    Tooltip,
+    font,
+    hover,
 )
 from .viewers import FullscreenVideoPlayer, FullscreenViewer, Viewer360
 
@@ -48,6 +62,10 @@ ALL_INDEX = 0
 
 #: EXIF reads are I/O bound, so a few threads help; more only thrash the disk.
 EXIF_WORKERS = 8
+
+#: Hover shade of the play button. It is the only control coloured by state
+#: rather than by role, so it does not come from the shared button palette.
+PLAY_BTN_HOVER = "#c05663"
 
 #: EXIF filter field -> i18n key for its inline label.
 EXIF_FILTER_LABELS = {
@@ -102,24 +120,36 @@ class ExplorerTab(tk.Frame):
 
     def _build_ui(self):
         body=tk.Frame(self,bg=BG); body.pack(fill="both",expand=True,padx=14,pady=10)
-        self.left=tk.Frame(body,bg=BG,width=250); self.left.pack(side="left",fill="y",padx=(0,10))
+        self.left=tk.Frame(body,bg=BG,width=268); self.left.pack(side="left",fill="y",padx=(0,SP_M+SP_S))
         self.left.pack_propagate(False)
-        self._lbl_summary=tk.Label(self.left,text=t("resume"),bg=BG,fg=MUTED,font=("Segoe UI",9,"bold")); self._lbl_summary.pack(anchor="w",pady=(0,6))
+        self._lbl_summary=tk.Label(self.left,text=t("resume"),bg=BG,fg=MUTED,
+                                   font=font(SIZE_MICRO,"bold"))
+        self._lbl_summary.pack(anchor="w",pady=(0,SP_M))
         self.summary_frame=tk.Frame(self.left,bg=BG); self.summary_frame.pack(fill="x")
-        self._lbl_by_cat=tk.Label(self.left,text=t("by_category"),bg=BG,fg=MUTED,font=("Segoe UI",9,"bold")); self._lbl_by_cat.pack(anchor="w",pady=(12,2))
-        self._lbl_click_filter=tk.Label(self.left,text=t("click_filter"),bg=BG,fg=MUTED,font=("Segoe UI",7)); self._lbl_click_filter.pack(anchor="w",pady=(0,6))
+        self._lbl_by_cat=tk.Label(self.left,text=t("by_category"),bg=BG,fg=MUTED,
+                                  font=font(SIZE_MICRO,"bold"))
+        self._lbl_by_cat.pack(anchor="w",pady=(SP_M+SP_M,SP_XS))
+        self._lbl_click_filter=tk.Label(self.left,text=t("click_filter"),bg=BG,fg=MUTED,
+                                        font=font(SIZE_MICRO))
+        self._lbl_click_filter.pack(anchor="w",pady=(0,SP_M))
         self.cat_frame=tk.Frame(self.left,bg=BG); self.cat_frame.pack(fill="x")
         center=tk.Frame(body,bg=BG); center.pack(side="left",fill="both",expand=True,padx=(0,10))
         self.paned=tk.PanedWindow(center,orient="vertical",bg=BG,sashwidth=6,sashrelief="flat")
         self.paned.pack(fill="both",expand=True)
         top_fr=tk.Frame(self.paned,bg=BG); self.paned.add(top_fr,minsize=120)
-        hdr=tk.Frame(top_fr,bg=BG); hdr.pack(fill="x",pady=(0,5))
-        self._lbl_detail_ext=tk.Label(hdr,text=t("detail_ext"),bg=BG,fg=MUTED,font=("Segoe UI",9,"bold")); self._lbl_detail_ext.pack(side="left")
+        hdr=tk.Frame(top_fr,bg=BG); hdr.pack(fill="x",pady=(0,SP_M))
+        self._lbl_detail_ext=tk.Label(hdr,text=t("detail_ext"),bg=BG,fg=MUTED,
+                                      font=font(SIZE_MICRO,"bold"))
+        self._lbl_detail_ext.pack(side="left")
         self.ext_filter_var=tk.StringVar()
         self.ext_filter_var.trace_add("write",lambda *_:self._apply_ext_filter())
-        tk.Label(hdr,text="🔍",bg=BG,fg=MUTED,font=("Segoe UI",10)).pack(side="right")
-        tk.Entry(hdr,textvariable=self.ext_filter_var,bg=SURFACE2,fg=TEXT,insertbackground=TEXT,
-                 relief="flat",font=("Segoe UI",9),width=18).pack(side="right",ipady=3,padx=(0,2))
+        search=tk.Frame(hdr,bg=SURFACE2); search.pack(side="right")
+        tk.Label(search,text="\U0001f50d",bg=SURFACE2,fg=MUTED,
+                 font=font(SIZE_SMALL)).pack(side="left",padx=(SP_M,0))
+        tk.Entry(search,textvariable=self.ext_filter_var,bg=SURFACE2,fg=TEXT,
+                 insertbackground=PRIMARY,relief="flat",highlightthickness=0,
+                 font=font(SIZE_SMALL),width=20).pack(side="left",ipady=SP_S,
+                                                      padx=(SP_S,SP_M))
         ext_tree_fr=tk.Frame(top_fr,bg=SURFACE); ext_tree_fr.pack(fill="both",expand=True)
         cols=("extension","category","count","size","percent")
         self.ext_tree=ttk.Treeview(ext_tree_fr,columns=cols,show="headings",
@@ -137,12 +167,13 @@ class ExplorerTab(tk.Frame):
         file_hdr=tk.Frame(bot_fr,bg=BG); file_hdr.pack(fill="x",pady=(6,0))
         self.file_section_lbl=tk.Label(file_hdr,
             text=t("files_select"),
-            bg=BG,fg=MUTED,font=("Segoe UI",9,"bold"))
+            bg=BG,fg=MUTED,font=font(SIZE_MICRO,"bold"))
         self.file_section_lbl.pack(side="left")
-        self.file_count_lbl=tk.Label(file_hdr,text="",bg=BG,fg=MUTED,font=("Segoe UI",9))
+        self.file_count_lbl=tk.Label(file_hdr,text="",bg=BG,fg=TEXT_DIM,
+                                     font=font(SIZE_MICRO))
         self.file_count_lbl.pack(side="right")
-        self.filter_bar=tk.Frame(bot_fr,bg=SURFACE,padx=10,pady=5)
-        self.filter_bar.pack(fill="x",pady=(3,0))
+        self.filter_bar=tk.Frame(bot_fr,bg=SURFACE,padx=SP_M+SP_S,pady=SP_M)
+        self.filter_bar.pack(fill="x",pady=(SP_S,0))
         self._build_filter_bar_base()
         file_tree_fr=tk.Frame(bot_fr,bg=SURFACE)
         file_tree_fr.pack(fill="both",expand=True,pady=(3,0))
@@ -159,12 +190,17 @@ class ExplorerTab(tk.Frame):
         self.file_tree.pack(fill="both",expand=True)
         self.file_tree.bind("<<TreeviewSelect>>",self._on_file_select)
         self.file_tree.bind("<Double-1>",self._open_selected_file)
-        self.path_lbl=tk.Label(bot_fr,text="",bg=SURFACE2,fg=TEXT,font=("Segoe UI",8),anchor="w",padx=8)
-        preview_col=tk.Frame(body,bg=BG,width=300)
+        self.path_lbl=tk.Label(bot_fr,text="",bg=SURFACE2,fg=TEXT_DIM,
+                               font=font(SIZE_MICRO),anchor="w",padx=SP_M,pady=SP_S)
+        preview_col=tk.Frame(body,bg=BG,width=306)
         preview_col.pack(side="left",fill="y"); preview_col.pack_propagate(False)
-        self._lbl_preview=tk.Label(preview_col,text=t("preview"),bg=BG,fg=MUTED,font=("Segoe UI",9,"bold")); self._lbl_preview.pack(anchor="w",pady=(0,4))
-        self._badge_360=tk.Label(preview_col,text=" 360 ",bg=ORANGE,fg="#1c1b19",font=("Segoe UI",8,"bold"))
-        self._badge_raw=tk.Label(preview_col,text=" RAW ",bg="#5591c7",fg="white",font=("Segoe UI",8,"bold"))
+        self._lbl_preview=tk.Label(preview_col,text=t("preview"),bg=BG,fg=MUTED,
+                                   font=font(SIZE_MICRO,"bold"))
+        self._lbl_preview.pack(anchor="w",pady=(0,SP_S+2))
+        self._badge_360=tk.Label(preview_col,text="  360\u00b0  ",bg=ORANGE,fg=BG,
+                                 font=font(SIZE_MICRO,"bold"),pady=1)
+        self._badge_raw=tk.Label(preview_col,text="  RAW  ",bg=BLUE,fg=BG,
+                                 font=font(SIZE_MICRO,"bold"),pady=1)
         self.preview_frame=tk.Frame(preview_col,bg=SURFACE,width=PREVIEW_W,height=PREVIEW_H)
         self.preview_frame.pack(fill="x"); self.preview_frame.pack_propagate(False)
         self.preview_canvas=tk.Canvas(self.preview_frame,bg=SURFACE,highlightthickness=0,
@@ -176,29 +212,42 @@ class ExplorerTab(tk.Frame):
         ttk.Scale(self._video_ctrl_frame,from_=0,to=1,orient="horizontal",variable=self._seek_var,
                   command=self._on_seek,style="Video.Horizontal.TScale").pack(fill="x",padx=8,pady=(4,2))
         ctrl_row=tk.Frame(self._video_ctrl_frame,bg=SURFACE2); ctrl_row.pack(fill="x",padx=8,pady=(0,4))
-        self._play_btn=tk.Button(ctrl_row,text="\u25b6",bg="#dd6974",fg="white",relief="flat",
-                                  font=("Segoe UI",12,"bold"),width=3,cursor="hand2",
-                                  activebackground="#b94a57",activeforeground="white",
+        self._play_btn=tk.Button(ctrl_row,text="\u25b6",bg=DANGER,fg="white",
+                                  relief="flat",bd=0,highlightthickness=0,
+                                  font=font(SIZE_H1,"bold"),width=3,cursor="hand2",
+                                  activebackground=PLAY_BTN_HOVER,
+                                  activeforeground="white",
                                   command=self._toggle_play)
-        self._play_btn.pack(side="left",padx=(0,4))
-        self._mute_btn=tk.Button(ctrl_row,text="\U0001f50a",bg=SURFACE2,fg=TEXT,relief="flat",
-                                  font=("Segoe UI",11),cursor="hand2",activebackground=BORDER,
+        self._play_btn.pack(side="left",padx=(0,SP_S+2))
+        Tooltip(self._play_btn, lambda: t("tip_play_pause"))
+        self._mute_btn=tk.Button(ctrl_row,text="\U0001f50a",bg=SURFACE2,fg=TEXT,
+                                  relief="flat",bd=0,highlightthickness=0,
+                                  font=font(SIZE_H1),cursor="hand2",
+                                  activebackground=SURFACE3,
                                   activeforeground=TEXT,command=self._toggle_mute)
-        self._mute_btn.pack(side="left",padx=(0,2))
+        self._mute_btn.pack(side="left",padx=(0,SP_XS))
+        hover(self._mute_btn, SURFACE2, SURFACE3)
         self._vol_var=tk.DoubleVar(value=1.0)
         ttk.Scale(ctrl_row,from_=0,to=1,orient="horizontal",variable=self._vol_var,
                   command=self._on_volume,style="Video.Horizontal.TScale",length=52).pack(side="left",padx=(0,6))
-        self._time_lbl=tk.Label(ctrl_row,text="0:00 / 0:00",bg=SURFACE2,fg=MUTED,font=("Segoe UI",8))
+        self._time_lbl=tk.Label(ctrl_row,text="0:00 / 0:00",bg=SURFACE2,fg=MUTED,font=font(SIZE_MICRO))
         self._time_lbl.pack(side="left")
-        tk.Button(ctrl_row,text="\u26f6",bg=SURFACE2,fg=TEXT,relief="flat",font=("Segoe UI",11),
-                  padx=4,cursor="hand2",activebackground=BORDER,
-                  command=self._open_video_fullscreen).pack(side="right")
+        _fs_btn=tk.Button(ctrl_row,text="\u26f6",bg=SURFACE2,fg=TEXT,relief="flat",
+                  bd=0,highlightthickness=0,font=font(SIZE_H1),
+                  padx=SP_S,cursor="hand2",activebackground=SURFACE3,
+                  command=self._open_video_fullscreen)
+        _fs_btn.pack(side="right")
+        hover(_fs_btn, SURFACE2, SURFACE3)
+        Tooltip(_fs_btn, lambda: t("tip_fullscreen"))
         self._update_seek_bar()
 
-        self._lbl_click_enlarge=tk.Label(preview_col,text=t("click_enlarge"),bg=BG,fg=MUTED,font=("Segoe UI",7))
+        self._lbl_click_enlarge=tk.Label(preview_col,text=t("click_enlarge"),bg=BG,
+                                         fg=MUTED,font=font(SIZE_MICRO))
         self.preview_canvas.bind("<Button-1>",self._on_preview_click)
 
-        self._lbl_metadata=tk.Label(preview_col,text=t("metadata"),bg=BG,fg=MUTED,font=("Segoe UI",9,"bold")); self._lbl_metadata.pack(anchor="w",pady=(6,4))
+        self._lbl_metadata=tk.Label(preview_col,text=t("metadata"),bg=BG,fg=MUTED,
+                                    font=font(SIZE_MICRO,"bold"))
+        self._lbl_metadata.pack(anchor="w",pady=(SP_M+2,SP_S+2))
         meta_wrap=tk.Frame(preview_col,bg=SURFACE); meta_wrap.pack(fill="both",expand=True)
         mc=tk.Canvas(meta_wrap,bg=SURFACE,highlightthickness=0)
         ms=ttk.Scrollbar(meta_wrap,orient="vertical",command=mc.yview,style="Dark.Vertical.TScrollbar")
@@ -214,12 +263,12 @@ class ExplorerTab(tk.Frame):
         self._muted = not self._muted
         if self._video_player: self._video_player.set_muted(self._muted)
         self._mute_btn.config(text="\U0001f507" if self._muted else "\U0001f50a",
-                              fg="#dd6974" if self._muted else TEXT)
+                              fg=DANGER if self._muted else TEXT)
 
     def _on_volume(self, val):
         v = float(val)
         if self._video_player: self._video_player.set_volume(v)
-        if v == 0: self._muted=True; self._mute_btn.config(text="\U0001f507",fg="#dd6974")
+        if v == 0: self._muted=True; self._mute_btn.config(text="\U0001f507",fg=DANGER)
         elif self._muted:
             self._muted=False
             if self._video_player: self._video_player.set_muted(False)
@@ -227,7 +276,7 @@ class ExplorerTab(tk.Frame):
 
     def _on_video_state(self, playing):
         self._play_btn.config(text="\u23f8" if playing else "\u25b6",
-                              bg=SUCCESS if playing else "#dd6974")
+                              bg=SUCCESS if playing else DANGER)
 
     def _on_seek(self, val):
         if self._video_player: self._video_player.seek(float(val))
@@ -245,9 +294,13 @@ class ExplorerTab(tk.Frame):
         if self._video_player: self._video_player.pause()
         FullscreenVideoPlayer(self, self._current_preview_path)
     def _draw_preview_placeholder(self):
+        """The empty preview says what to do, not merely that it is empty."""
         self.preview_canvas.delete("all")
-        self.preview_canvas.create_text(PREVIEW_W//2, PREVIEW_H//2,
-            text=t("select_file"), fill=MUTED, font=("Segoe UI",11), justify="center")
+        self.preview_canvas.create_text(PREVIEW_W//2, PREVIEW_H//2 - 16,
+            text="\U0001f5bc", fill=BORDER, font=font(30))
+        self.preview_canvas.create_text(PREVIEW_W//2, PREVIEW_H//2 + 24,
+            text=t("select_file"), fill=MUTED, font=font(SIZE_SMALL),
+            justify="center")
 
     def _show_preview(self, filepath):
         if self._video_player: self._video_player.stop()
@@ -261,8 +314,8 @@ class ExplorerTab(tk.Frame):
             self._current_is_raw=True
             self._badge_raw.pack(anchor="center",pady=(0,2))
             self._lbl_click_enlarge.pack(anchor="center",pady=(0,4))
-            self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2-15,text="\u23f3",fill=MUTED,font=("Segoe UI",28))
-            self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2+25,text=t("decoding_raw"),fill=MUTED,font=("Segoe UI",9))
+            self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2-15,text="\u23f3",fill=MUTED,font=font(26))
+            self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2+25,text=t("decoding_raw"),fill=MUTED,font=font(SIZE_SMALL))
             threading.Thread(target=self._load_raw_preview,args=(filepath,),daemon=True).start()
             return
 
@@ -280,17 +333,20 @@ class ExplorerTab(tk.Frame):
         if ext in VIDEO_EXTS:
             self._current_is_video=True
             self._video_ctrl_frame.pack(fill="x",pady=(0,4))
-            self._play_btn.config(text="\u25b6",bg="#dd6974")
+            self._play_btn.config(text="\u25b6",bg=DANGER)
             self._seek_var.set(0.0); self._time_lbl.config(text="0:00 / 0:00")
             self._muted=False; self._mute_btn.config(text="\U0001f50a",fg=TEXT); self._vol_var.set(1.0)
             self._video_player.load(filepath,on_state_change=self._on_video_state)
             return
 
-        icons={"audio":("\U0001f3b5","#6daa45"),"code":("\u2328","#4f98a3"),"docs":("\U0001f4c4","#a86fdf"),
-               "data":("\U0001f4ca","#5591c7"),"archives":("\U0001f4e6","#bb653b"),"other":("\U0001f4ce","#797876")}
-        cat=get_category(ext); icon,color=icons.get(cat,("\U0001f4c4",MUTED))
-        self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2-20,text=icon,fill=color,font=("Segoe UI",48))
-        self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2+30,text=ext.upper() if ext else "?",fill=color,font=("Segoe UI",14,"bold"))
+        # The icon says what kind of file it is; the colour is taken from the
+        # category palette so it matches the bars and the table on the left.
+        icons={"audio":"\U0001f3b5","code":"\u2328","docs":"\U0001f4c4",
+               "data":"\U0001f4ca","archives":"\U0001f4e6","other":"\U0001f4ce"}
+        cat=get_category(ext)
+        icon=icons.get(cat,"\U0001f4c4"); color=EXTENSION_COLORS.get(cat,MUTED)
+        self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2-20,text=icon,fill=color,font=font(46))
+        self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2+30,text=ext.upper() if ext else "?",fill=color,font=font(SIZE_TITLE, "bold"))
 
     def _load_raw_preview(self, filepath):
         img = open_raw_thumbnail(filepath)
@@ -305,13 +361,12 @@ class ExplorerTab(tk.Frame):
         else:
             def show_err():
                 self.preview_canvas.delete("all")
-                self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2-15,text="\U0001f39e",fill="#5591c7",font=("Segoe UI",30))
+                self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2-15,text="\U0001f39e",fill=BLUE,font=font(28))
                 self.preview_canvas.create_text(PREVIEW_W//2,PREVIEW_H//2+20,
-                    text=t("rawpy_required"),fill=MUTED,font=("Segoe UI",8),justify="center")
+                    text=t("rawpy_required"),fill=MUTED,font=font(SIZE_MICRO),justify="center")
             self.after(0,show_err)
 
     def _on_preview_click(self, event=None):
-        print("[ORGANIZE] _on_preview_click triggered")
         path=self._current_preview_path
         if not path: return
         ext=Path(path).suffix.lower()
@@ -327,16 +382,16 @@ class ExplorerTab(tk.Frame):
             w.destroy()
         if not rows:
             tr(tk.Label(self.meta_inner, bg=SURFACE, fg=MUTED,
-                        font=("Segoe UI", 8)),
+                        font=font(SIZE_MICRO)),
                "no_metadata").pack(anchor="w", padx=8, pady=4)
             return
         for key, value in rows:
             row = tk.Frame(self.meta_inner, bg=SURFACE)
             row.pack(fill="x", padx=6, pady=1)
-            tr(tk.Label(row, bg=SURFACE, fg=MUTED, font=("Segoe UI", 8),
+            tr(tk.Label(row, bg=SURFACE, fg=MUTED, font=font(SIZE_MICRO),
                         width=14, anchor="w"), key).pack(side="left")
             tk.Label(row, text=str(value), bg=SURFACE, fg=TEXT,
-                     font=("Segoe UI", 8), anchor="w",
+                     font=font(SIZE_MICRO), anchor="w",
                      wraplength=155).pack(side="left", fill="x", expand=True)
 
     #: Column id -> (i18n key, width). Ids are stable; only the labels change.
@@ -368,39 +423,74 @@ class ExplorerTab(tk.Frame):
             self.file_tree.column(col, width=width,
                                   anchor="w" if col == "name" else "center")
 
+    #: ttk style shared by every filter dropdown in the bar.
+    FILTER_COMBO_STYLE = "Filter.TCombobox"
+
+    def _install_filter_combo_style(self):
+        """Dark styling for the filter dropdowns.
+
+        A ttk Combobox ignores ``bg``/``fg``, so left alone it renders in the
+        platform's light theme -- three white boxes in the middle of a dark
+        toolbar, which is how it looked before.
+        """
+        st = ttk.Style()
+        st.configure(self.FILTER_COMBO_STYLE,
+                     fieldbackground=SURFACE2, background=SURFACE2,
+                     foreground=TEXT, selectbackground=SURFACE2,
+                     selectforeground=TEXT, arrowcolor=PRIMARY,
+                     borderwidth=0, relief="flat", padding=(6, 3))
+        st.map(self.FILTER_COMBO_STYLE,
+               fieldbackground=[(("readonly",), SURFACE2)],
+               background=[(("active",), SURFACE3)],
+               foreground=[(("readonly",), TEXT)])
+
+    def _filter_combo(self, value, values, width=11):
+        """One dropdown in the filter bar, already styled and wired."""
+        var = tk.StringVar(value=value)
+        combo = ttk.Combobox(self.filter_bar, textvariable=var, values=values,
+                             width=width, state="readonly",
+                             style=self.FILTER_COMBO_STYLE, font=font(SIZE_SMALL))
+        combo.pack(side="left", padx=(SP_S, SP_M + SP_S))
+        combo.bind("<<ComboboxSelected>>", lambda *_: self._apply_file_filter())
+        return var, combo
+
     def _build_filter_bar_base(self):
         for w in self.filter_bar.winfo_children(): w.destroy()
+        self._install_filter_combo_style()
         self._filter_widgets={}
-        self._lbl_filter_name=tk.Label(self.filter_bar,text=t("filter_name"),bg=SURFACE,fg=MUTED,font=("Segoe UI",9)); self._lbl_filter_name.pack(side="left")
+        self._lbl_filter_name=tk.Label(self.filter_bar,text=t("filter_name"),
+                                       bg=SURFACE,fg=MUTED,font=font(SIZE_MICRO))
+        self._lbl_filter_name.pack(side="left")
         v=tk.StringVar(); v.trace_add("write",lambda *_:self._apply_file_filter())
-        tk.Entry(self.filter_bar,textvariable=v,bg=SURFACE2,fg=TEXT,insertbackground=TEXT,
-                 relief="flat",font=("Segoe UI",9),width=14).pack(side="left",ipady=3,padx=(3,12))
+        tk.Entry(self.filter_bar,textvariable=v,bg=SURFACE2,fg=TEXT,
+                 insertbackground=PRIMARY,relief="flat",highlightthickness=0,
+                 font=font(SIZE_SMALL),width=15).pack(side="left",ipady=SP_S,
+                                                      padx=(SP_S,SP_M+SP_S))
         self._filter_widgets["name"]=(v,None)
-        self._lbl_filter_ext=tk.Label(self.filter_bar,text=t("filter_ext"),bg=SURFACE,fg=MUTED,font=("Segoe UI",9)); self._lbl_filter_ext.pack(side="left")
-        v2=tk.StringVar(value=t("filter_all"))
-        cb=ttk.Combobox(self.filter_bar,textvariable=v2,values=[t("filter_all")],width=10,state="readonly",font=("Segoe UI",9))
-        cb.pack(side="left",padx=(3,12)); cb.bind("<<ComboboxSelected>>",lambda *_:self._apply_file_filter())
-        self._filter_widgets["ext"]=(v2,cb)
-        self._exif_lbl=tk.Label(self.filter_bar,text="",bg=SURFACE,fg=ORANGE,font=("Segoe UI",8))
-        self._exif_lbl.pack(side="right",padx=(0,6))
-        self._btn_reset_filter=tk.Button(self.filter_bar,text=t("reset"),bg=SURFACE2,fg=MUTED,relief="flat",
-                  font=("Segoe UI",8),padx=6,pady=2,cursor="hand2",
+        self._lbl_filter_ext=tk.Label(self.filter_bar,text=t("filter_ext"),
+                                      bg=SURFACE,fg=MUTED,font=font(SIZE_MICRO))
+        self._lbl_filter_ext.pack(side="left")
+        self._filter_widgets["ext"]=self._filter_combo(t("filter_all"),
+                                                       [t("filter_all")], width=10)
+        self._exif_lbl=tk.Label(self.filter_bar,text="",bg=SURFACE,fg=ORANGE,
+                                font=font(SIZE_MICRO))
+        self._exif_lbl.pack(side="right",padx=(0,SP_M))
+        self._btn_reset_filter=tk.Button(self.filter_bar,text=t("reset"),bg=SURFACE2,
+                  fg=MUTED,relief="flat",bd=0,highlightthickness=0,
+                  font=font(SIZE_MICRO),padx=SP_M,pady=SP_S,cursor="hand2",
                   command=self._reset_file_filters)
         self._btn_reset_filter.pack(side="right")
+        hover(self._btn_reset_filter, SURFACE2, SURFACE3, MUTED, TEXT)
+        Tooltip(self._btn_reset_filter, lambda: t("tip_reset_filters"))
 
     def _add_exif_filters(self):
         """Add the per-EXIF-field combos shown for image categories."""
         for field in FILTER_FIELDS:
             tr(tk.Label(self.filter_bar, bg=SURFACE, fg=MUTED,
-                        font=("Segoe UI", 9)),
+                        font=font(SIZE_MICRO)),
                EXIF_FILTER_LABELS[field]).pack(side="left")
-            var = tk.StringVar(value=t("filter_all2"))
-            combo = ttk.Combobox(self.filter_bar, textvariable=var,
-                                 values=[t("filter_all2")],
-                                 width=10, state="readonly", font=("Segoe UI", 9))
-            combo.pack(side="left", padx=(3, 10))
-            combo.bind("<<ComboboxSelected>>", lambda *_: self._apply_file_filter())
-            self._filter_widgets[field] = (var, combo)
+            self._filter_widgets[field] = self._filter_combo(
+                t("filter_all2"), [t("filter_all2")], width=10)
 
     def _populate_exif_combos(self):
         for field in FILTER_FIELDS:
@@ -476,31 +566,63 @@ class ExplorerTab(tk.Frame):
             self._cat_bar(self.cat_frame, cat, count, total, color, size)
 
     def _card(self,parent,label,value,color):
-        f=tk.Frame(parent,bg=SURFACE,pady=7,padx=10); f.pack(fill="x",pady=(0,5))
-        tk.Label(f,text=label,bg=SURFACE,fg=MUTED,font=("Segoe UI",8)).pack(anchor="w")
-        tk.Label(f,text=value,bg=SURFACE,fg=color,font=("Segoe UI",14,"bold")).pack(anchor="w")
+        """One statistic, with the colour of its metric carried by an edge bar.
+
+        The four cards used to differ only by the colour of their number,
+        which made the column read as one block of text. A coloured edge gives
+        each card an outline the eye can land on before reading anything.
+        """
+        outer=tk.Frame(parent,bg=SURFACE); outer.pack(fill="x",pady=(0,SP_S+2))
+        tk.Frame(outer,bg=color,width=3).pack(side="left",fill="y")
+        f=tk.Frame(outer,bg=SURFACE,pady=SP_M,padx=SP_M+2)
+        f.pack(side="left",fill="both",expand=True)
+        tk.Label(f,text=label,bg=SURFACE,fg=MUTED,
+                 font=font(SIZE_MICRO)).pack(anchor="w")
+        tk.Label(f,text=value,bg=SURFACE,fg=color,
+                 font=font(SIZE_H1+4,"bold")).pack(anchor="w",pady=(1,0))
+
+    #: Height of the share-of-total bar under each category row.
+    CAT_BAR_H = 4
 
     def _cat_bar(self,parent,cat,count,total,color,cat_size=0):
-        f=tk.Frame(parent,bg=SURFACE,pady=4,padx=8,cursor="hand2"); f.pack(fill="x",pady=(0,4))
-        row=tk.Frame(f,bg=SURFACE); row.pack(fill="x")
-        tk.Label(row,text="●",bg=SURFACE,fg=color,font=("Segoe UI",9)).pack(side="left")
-        lbl=tk.Label(row,text=f" {category_label(cat)}",bg=SURFACE,fg=TEXT,font=("Segoe UI",9)); lbl.pack(side="left")
-        cnt_lbl=tk.Label(row,text=f"{count:,}  •  {fmt_size(cat_size)}",bg=SURFACE,fg=color,font=("Segoe UI",9,"bold")); cnt_lbl.pack(side="right")
-        bar_bg=tk.Frame(f,bg=SURFACE2,height=3); bar_bg.pack(fill="x",pady=(2,0))
-        bar_bg.update_idletasks(); fill_w=max(4,int(bar_bg.winfo_width()*(count/total if total else 0)))
-        tk.Frame(bar_bg,bg=color,height=3,width=fill_w).place(x=0,y=0)
-        def repaint(color):
-            for w in (f, row, bar_bg, lbl, cnt_lbl) + tuple(row.winfo_children()):
+        """A clickable category row: name, count, and its share of the scan."""
+        active = (cat == self._active_cat)
+        base = SURFACE2 if active else SURFACE
+        f=tk.Frame(parent,bg=base,pady=SP_S+2,padx=SP_M,cursor="hand2")
+        f.pack(fill="x",pady=(0,SP_S))
+        row=tk.Frame(f,bg=base); row.pack(fill="x")
+        dot=tk.Label(row,text="\u25cf",bg=base,fg=color,font=font(SIZE_SMALL))
+        dot.pack(side="left")
+        lbl=tk.Label(row,text=f"  {category_label(cat)}",bg=base,fg=TEXT,
+                     font=font(SIZE_SMALL,"bold" if active else "normal"))
+        lbl.pack(side="left")
+        cnt_lbl=tk.Label(row,text=f"{count:,}  \u2022  {fmt_size(cat_size)}",bg=base,
+                         fg=color,font=font(SIZE_SMALL,"bold"))
+        cnt_lbl.pack(side="right")
+        bar_bg=tk.Frame(f,bg=BORDER_SOFT,height=self.CAT_BAR_H)
+        bar_bg.pack(fill="x",pady=(SP_S,0))
+        share = (count / total) if total else 0
+        # The bar is placed by ratio rather than by pixel width: measuring the
+        # parent here returned a stale width on the first render, which made
+        # every category look the same size until the window was resized.
+        tk.Frame(bar_bg,bg=color,height=self.CAT_BAR_H).place(
+            x=0,y=0,relwidth=max(0.015,share),relheight=1.0)
+        widgets=(f,row,bar_bg,dot,lbl,cnt_lbl)
+
+        def repaint(bg):
+            for w in widgets:
                 try:
-                    w.configure(bg=color)
+                    w.configure(bg=bg)
                 except tk.TclError:
                     pass
 
-        def on_enter(_e): repaint(SURFACE2)
-        def on_leave(_e): repaint(SURFACE)
-        for w in (f,row,bar_bg,lbl,cnt_lbl)+tuple(row.winfo_children()):
+        def on_enter(_e): repaint(SURFACE3 if active else SURFACE2)
+        def on_leave(_e): repaint(base)
+        for w in widgets:
             w.bind("<Enter>",on_enter); w.bind("<Leave>",on_leave)
             w.bind("<Button-1>",lambda e,c=cat:self._load_category(c,ext_filter=None))
+        Tooltip(f, lambda c=cat, n=count, sh=share:
+                t("tip_category", cat=category_label(c), n=n, pct=round(sh*100, 1)))
 
     def _on_ext_row_click(self,event):
         sel=self.ext_tree.selection()
@@ -510,6 +632,7 @@ class ExplorerTab(tk.Frame):
 
     def _load_category(self,cat,ext_filter=None):
         self._active_cat=cat; self._active_ext_filter=ext_filter
+        self._render_categories()
         files=self._cat_files.get(cat,[]); self._file_rows=files
         color=EXTENSION_COLORS.get(cat,MUTED)
         label=category_label(cat)+(f"  /  {ext_filter}" if ext_filter else "")

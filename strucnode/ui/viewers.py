@@ -13,7 +13,46 @@ from ..core.categories import RAW_EXTS
 from ..i18n import t
 from ..media.images import open_raw_thumbnail
 from ..media.video import VideoPlayer
-from ..theme import BORDER, MUTED, ORANGE, SUCCESS, SURFACE2, TEXT
+from ..theme import (
+    BG,
+    BORDER,
+    DANGER,
+    MUTED,
+    ORANGE,
+    SIZE_BODY,
+    SIZE_H1,
+    SIZE_MICRO,
+    SIZE_TITLE,
+    SUCCESS,
+    SURFACE2,
+    SURFACE3,
+    TEXT,
+    font,
+    hover,
+)
+
+#: The chrome of a fullscreen viewer sits under the media, not beside it, so
+#: it is darker than any surface used elsewhere -- the image is the subject.
+VIEWER_BAR = "#0e0e0e"
+#: The tint behind the close button: red enough to find, dark enough not to
+#: pull the eye away from the picture.
+VIEWER_CLOSE_BG = "#3a2020"
+
+
+def _bar_button(parent, text, command, **overrides):
+    """A viewer toolbar button, hover state included.
+
+    The viewers build their controls from one shared config dict, so a plain
+    ``tk.Button`` here means every one of them looks inert under the cursor.
+    Routing them through a helper is what gives the whole bar feedback.
+    """
+    opts = dict(bg=SURFACE2, fg=TEXT, relief="flat", bd=0, highlightthickness=0,
+                font=font(SIZE_BODY), padx=10, pady=4, cursor="hand2",
+                activebackground=SURFACE3, activeforeground=TEXT)
+    opts.update(overrides)
+    btn = tk.Button(parent, text=text, command=command, **opts)
+    return hover(btn, opts["bg"], SURFACE3, opts["fg"], TEXT)
+
 
 log = logging.getLogger(__name__)
 
@@ -30,31 +69,31 @@ class FullscreenVideoPlayer(tk.Toplevel):
         self.canvas = tk.Canvas(self, bg="black", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
 
-        bar = tk.Frame(self, bg="#0e0e0e"); bar.pack(side="bottom", fill="x")
+        bar = tk.Frame(self, bg=VIEWER_BAR); bar.pack(side="bottom", fill="x")
         s = ttk.Style(self)
-        s.configure("FS.Horizontal.TScale", background="#0e0e0e",
-                    troughcolor="#393836", sliderlength=14, sliderrelief="flat")
+        s.configure("FS.Horizontal.TScale", background=VIEWER_BAR,
+                    troughcolor=BORDER, sliderlength=14, sliderrelief="flat")
         ttk.Scale(bar, from_=0, to=1, orient="horizontal", variable=self._seek_var,
                   command=self._on_seek, style="FS.Horizontal.TScale").pack(fill="x", padx=12, pady=(6,2))
-        btn_row = tk.Frame(bar, bg="#0e0e0e"); btn_row.pack(fill="x", padx=12, pady=(0,8))
-        self._play_btn = tk.Button(btn_row, text="\u23f8", fg=SUCCESS, bg="#0e0e0e",
-            relief="flat", font=("Segoe UI",13,"bold"), width=3,
-            cursor="hand2", activebackground="#0e0e0e", command=self._toggle_play)
+        btn_row = tk.Frame(bar, bg=VIEWER_BAR); btn_row.pack(fill="x", padx=12, pady=(0,8))
+        self._play_btn = tk.Button(btn_row, text="\u23f8", fg=SUCCESS, bg=VIEWER_BAR,
+            relief="flat", font=font(SIZE_TITLE, "bold"), width=3,
+            cursor="hand2", activebackground=VIEWER_BAR, command=self._toggle_play)
         self._play_btn.pack(side="left", padx=(0,8))
-        self._time_lbl = tk.Label(btn_row, text="0:00 / 0:00", bg="#0e0e0e", fg=MUTED, font=("Segoe UI",10))
+        self._time_lbl = tk.Label(btn_row, text="0:00 / 0:00", bg=VIEWER_BAR, fg=MUTED, font=font(SIZE_BODY))
         self._time_lbl.pack(side="left", padx=(0,16))
-        self._mute_btn = tk.Button(btn_row, text="\U0001f50a", fg=TEXT, bg="#0e0e0e", relief="flat",
-            font=("Segoe UI",12), cursor="hand2",
-            activebackground="#0e0e0e", command=self._toggle_mute)
+        self._mute_btn = tk.Button(btn_row, text="\U0001f50a", fg=TEXT, bg=VIEWER_BAR, relief="flat",
+            font=font(SIZE_H1), cursor="hand2",
+            activebackground=VIEWER_BAR, command=self._toggle_mute)
         self._mute_btn.pack(side="left")
         self._vol_var = tk.DoubleVar(value=1.0)
         ttk.Scale(btn_row, from_=0, to=1, orient="horizontal", variable=self._vol_var,
                   command=self._on_volume, style="FS.Horizontal.TScale", length=90).pack(side="left", padx=(4,16))
-        tk.Button(btn_row, text=t("close_btn"), bg="#3a2020", fg="#dd6974", relief="flat",
-            font=("Segoe UI",10), padx=12, pady=2, cursor="hand2",
+        tk.Button(btn_row, text=t("close_btn"), bg=VIEWER_CLOSE_BG, fg=DANGER, relief="flat",
+            font=font(SIZE_BODY), padx=12, pady=2, cursor="hand2",
             command=self._close).pack(side="right")
         tk.Label(btn_row, text=t("video_hint"),
-            bg="#0e0e0e", fg=MUTED, font=("Segoe UI",8)).pack(side="right", padx=12)
+            bg=VIEWER_BAR, fg=MUTED, font=font(SIZE_MICRO)).pack(side="right", padx=12)
 
         self.bind("<Escape>", lambda e: self._close())
         self.bind("<space>", lambda e: self._toggle_play())
@@ -81,7 +120,7 @@ class FullscreenVideoPlayer(tk.Toplevel):
     def _on_state(self, playing):
         try:
             if not self.winfo_exists(): return
-            self._play_btn.config(text="\u23f8" if playing else "\u25b6", fg=SUCCESS if playing else "#dd6974")
+            self._play_btn.config(text="\u23f8" if playing else "\u25b6", fg=SUCCESS if playing else DANGER)
         except Exception:
             pass
 
@@ -92,11 +131,11 @@ class FullscreenVideoPlayer(tk.Toplevel):
         self._muted = not self._muted
         self._player.set_muted(self._muted)
         self._mute_btn.config(text="\U0001f507" if self._muted else "\U0001f50a",
-                              fg="#dd6974" if self._muted else TEXT)
+                              fg=DANGER if self._muted else TEXT)
 
     def _on_volume(self, val):
         v = float(val); self._player.set_volume(v)
-        if v == 0: self._muted=True; self._mute_btn.config(text="\U0001f507",fg="#dd6974")
+        if v == 0: self._muted=True; self._mute_btn.config(text="\U0001f507",fg=DANGER)
         elif self._muted:
             self._muted=False; self._player.set_muted(False); self._mute_btn.config(text="\U0001f50a",fg=TEXT)
 
@@ -125,22 +164,22 @@ class FullscreenViewer(tk.Toplevel):
         threading.Thread(target=self._load_image, daemon=True).start()
 
     def _build_ui(self):
-        bar=tk.Frame(self,bg="#111110",pady=8,padx=10); bar.pack(side="bottom",fill="x")
+        bar=tk.Frame(self,bg=VIEWER_BAR,pady=8,padx=10); bar.pack(side="bottom",fill="x")
         self.canvas=tk.Canvas(self,bg="black",highlightthickness=0); self.canvas.pack(fill="both",expand=True)
-        bc=dict(bg=SURFACE2,fg=TEXT,relief="flat",font=("Segoe UI",10),padx=10,pady=4,cursor="hand2",activebackground=BORDER,activeforeground=TEXT)
-        def sep(): tk.Label(bar,text="|",bg="#111110",fg=BORDER,font=("Segoe UI",12)).pack(side="left",padx=3)
-        tk.Button(bar,text=t("close_btn"),bg="#3a2020",fg="#dd6974",relief="flat",font=("Segoe UI",10),padx=12,pady=4,cursor="hand2",command=self.destroy).pack(side="right",padx=(6,0))
-        tk.Label(bar,text=t("viewer_hint"),bg="#111110",fg=MUTED,font=("Segoe UI",8)).pack(side="right",padx=12)
-        self._rot_lbl=tk.Label(bar,text="0\u00b0",bg="#111110",fg=ORANGE,font=("Segoe UI",11,"bold"),width=8); self._rot_lbl.pack(side="left",padx=(0,8))
-        tk.Button(bar,text="\u21ba 90\u00b0",**bc,command=lambda:self._rotate(-90)).pack(side="left",padx=2)
-        tk.Button(bar,text="\u21bb 90\u00b0",**bc,command=lambda:self._rotate(90)).pack(side="left",padx=2)
-        tk.Button(bar,text="\u21d5 180\u00b0",**bc,command=lambda:self._rotate(180)).pack(side="left",padx=2)
+        bc = dict(padx=10, pady=4)
+        def sep(): tk.Label(bar,text="|",bg=VIEWER_BAR,fg=BORDER,font=font(SIZE_H1)).pack(side="left",padx=3)
+        tk.Button(bar,text=t("close_btn"),bg=VIEWER_CLOSE_BG,fg=DANGER,relief="flat",font=font(SIZE_BODY),padx=12,pady=4,cursor="hand2",command=self.destroy).pack(side="right",padx=(6,0))
+        tk.Label(bar,text=t("viewer_hint"),bg=VIEWER_BAR,fg=MUTED,font=font(SIZE_MICRO)).pack(side="right",padx=12)
+        self._rot_lbl=tk.Label(bar,text="0\u00b0",bg=VIEWER_BAR,fg=ORANGE,font=font(SIZE_H1, "bold"),width=8); self._rot_lbl.pack(side="left",padx=(0,8))
+        _bar_button(bar, "\u21ba 90\u00b0", lambda:self._rotate(-90), **bc).pack(side="left",padx=2)
+        _bar_button(bar, "\u21bb 90\u00b0", lambda:self._rotate(90), **bc).pack(side="left",padx=2)
+        _bar_button(bar, "\u21d5 180\u00b0", lambda:self._rotate(180), **bc).pack(side="left",padx=2)
         sep()
-        tk.Button(bar,text="\u21d4 H",**bc,command=self._flip_horizontal).pack(side="left",padx=2)
-        tk.Button(bar,text="\u21d5 V",**bc,command=self._flip_vertical).pack(side="left",padx=2)
+        _bar_button(bar, "\u21d4 H", self._flip_horizontal, **bc).pack(side="left",padx=2)
+        _bar_button(bar, "\u21d5 V", self._flip_vertical, **bc).pack(side="left",padx=2)
         sep()
-        tk.Button(bar,text="\u21ba Reset",bg=SURFACE2,fg=ORANGE,relief="flat",font=("Segoe UI",10),padx=10,pady=4,cursor="hand2",activebackground=BORDER,command=self._reset).pack(side="left",padx=2)
-        if self._is_raw: tk.Label(bar,text="RAW",bg=ORANGE,fg="#1c1b19",font=("Segoe UI",8,"bold"),padx=6,pady=2).pack(side="left",padx=6)
+        tk.Button(bar,text="\u21ba Reset",bg=SURFACE2,fg=ORANGE,relief="flat",font=font(SIZE_BODY),padx=10,pady=4,cursor="hand2",activebackground=BORDER,command=self._reset).pack(side="left",padx=2)
+        if self._is_raw: tk.Label(bar,text="RAW",bg=ORANGE,fg=BG,font=font(SIZE_MICRO, "bold"),padx=6,pady=2).pack(side="left",padx=6)
         self.bind("<Escape>",lambda e:self.destroy())
         self.canvas.bind("<ButtonPress-1>",self._drag_start_cb)
         self.canvas.bind("<B1-Motion>",self._drag_move_cb)
@@ -206,20 +245,20 @@ class Viewer360(tk.Toplevel):
         self.configure(bg="black"); self.attributes("-fullscreen",True)
         self.filepath=filepath; self._yaw=0.0; self._pitch=0.0; self._fov=self.FOV; self._roll=0
         self._drag_start=None; self._pano=None; self._tk_img=None; self._rendering=False; self._pending=False
-        bar=tk.Frame(self,bg="#111110",pady=7,padx=8); bar.pack(side="bottom",fill="x")
+        bar=tk.Frame(self,bg=VIEWER_BAR,pady=7,padx=8); bar.pack(side="bottom",fill="x")
         self.canvas=tk.Canvas(self,bg="black",highlightthickness=0); self.canvas.pack(fill="both",expand=True)
-        bc=dict(bg=SURFACE2,fg=TEXT,relief="flat",font=("Segoe UI",10),padx=9,pady=3,cursor="hand2",activebackground=BORDER,activeforeground=TEXT)
-        def sep(): tk.Label(bar,text="|",bg="#111110",fg=BORDER,font=("Segoe UI",12)).pack(side="left",padx=3)
-        tk.Label(bar,text="\U0001f310 360\u00b0",bg="#111110",fg=ORANGE,font=("Segoe UI",10,"bold")).pack(side="left",padx=(0,6)); sep()
-        tk.Button(bar,text="\u21ba \u221290\u00b0",**bc,command=lambda:self._add_roll(-90)).pack(side="left",padx=2)
-        tk.Button(bar,text="\u21bb +90\u00b0",**bc,command=lambda:self._add_roll(90)).pack(side="left",padx=2)
-        self._roll_lbl=tk.Label(bar,text="0\u00b0",bg="#111110",fg=ORANGE,font=("Segoe UI",10,"bold"),width=5); self._roll_lbl.pack(side="left",padx=(2,4)); sep()
-        tk.Button(bar,text="\u2b06",**bc,command=lambda:self._set_pitch(85)).pack(side="left",padx=2)
-        tk.Button(bar,text="\u27a1",**bc,command=lambda:self._set_pitch(0)).pack(side="left",padx=2)
-        tk.Button(bar,text="\u2b07",**bc,command=lambda:self._set_pitch(-85)).pack(side="left",padx=2); sep()
-        tk.Button(bar,text="\u21ba Reset",bg=SURFACE2,fg=ORANGE,relief="flat",font=("Segoe UI",10),padx=9,pady=3,cursor="hand2",activebackground=BORDER,command=self._reset_view).pack(side="left",padx=2); sep()
-        tk.Button(bar,text=t("close_btn"),bg="#3a2020",fg="#dd6974",relief="flat",font=("Segoe UI",10),padx=12,pady=3,cursor="hand2",command=self.destroy).pack(side="right",padx=(6,0))
-        self._info_lbl=tk.Label(bar,text=t("loading"),bg="#111110",fg=MUTED,font=("Segoe UI",8)); self._info_lbl.pack(side="right",padx=8)
+        bc = dict(padx=9, pady=3)
+        def sep(): tk.Label(bar,text="|",bg=VIEWER_BAR,fg=BORDER,font=font(SIZE_H1)).pack(side="left",padx=3)
+        tk.Label(bar,text="\U0001f310 360\u00b0",bg=VIEWER_BAR,fg=ORANGE,font=font(SIZE_BODY, "bold")).pack(side="left",padx=(0,6)); sep()
+        _bar_button(bar, "\u21ba \u221290\u00b0", lambda:self._add_roll(-90), **bc).pack(side="left",padx=2)
+        _bar_button(bar, "\u21bb +90\u00b0", lambda:self._add_roll(90), **bc).pack(side="left",padx=2)
+        self._roll_lbl=tk.Label(bar,text="0\u00b0",bg=VIEWER_BAR,fg=ORANGE,font=font(SIZE_BODY, "bold"),width=5); self._roll_lbl.pack(side="left",padx=(2,4)); sep()
+        _bar_button(bar, "\u2b06", lambda:self._set_pitch(85), **bc).pack(side="left",padx=2)
+        _bar_button(bar, "\u27a1", lambda:self._set_pitch(0), **bc).pack(side="left",padx=2)
+        _bar_button(bar, "\u2b07", lambda:self._set_pitch(-85), **bc).pack(side="left",padx=2); sep()
+        tk.Button(bar,text="\u21ba Reset",bg=SURFACE2,fg=ORANGE,relief="flat",font=font(SIZE_BODY),padx=9,pady=3,cursor="hand2",activebackground=BORDER,command=self._reset_view).pack(side="left",padx=2); sep()
+        tk.Button(bar,text=t("close_btn"),bg=VIEWER_CLOSE_BG,fg=DANGER,relief="flat",font=font(SIZE_BODY),padx=12,pady=3,cursor="hand2",command=self.destroy).pack(side="right",padx=(6,0))
+        self._info_lbl=tk.Label(bar,text=t("loading"),bg=VIEWER_BAR,fg=MUTED,font=font(SIZE_MICRO)); self._info_lbl.pack(side="right",padx=8)
         self.bind("<Escape>",lambda e:self.destroy())
         self.bind("<Left>",lambda e:self._add_yaw(-15)); self.bind("<Right>",lambda e:self._add_yaw(15))
         self.bind("<Up>",lambda e:self._add_pitch(10)); self.bind("<Down>",lambda e:self._add_pitch(-10))

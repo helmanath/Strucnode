@@ -21,22 +21,70 @@ from ...i18n import set_raw, t, tr, tr_var
 from ...theme import (
     BG,
     BORDER,
+    BORDER_SOFT,
+    CANVAS_BG,
+    CANVAS_GRID,
+    CANVAS_GRID_MAJOR,
     COLOR_ARGUMENT,
     COLOR_FOLDER,
     COLOR_LIANT,
+    DANGER,
     MUTED,
+    ON_ACCENT,
     ORANGE,
     PRIMARY,
     PRIMARY_H,
+    SIZE_BODY,
+    SIZE_H1,
+    SIZE_H2,
+    SIZE_MICRO,
+    SIZE_SMALL,
+    SIZE_TITLE,
+    SP_M,
+    SP_S,
+    SP_XS,
     SUCCESS,
     SURFACE,
     SURFACE2,
+    SURFACE3,
     TEXT,
+    TEXT_DIM,
+    Tooltip,
+    button,
+    font,
+    hover,
 )
 from .node import Node
 from .presets import PresetStore
 
 log = logging.getLogger(__name__)
+
+#: How many segments a wire is sampled into. Enough to look continuous at the
+#: zoom levels the editor allows, few enough that dragging a node stays smooth.
+WIRE_STEPS = 18
+
+
+def _bezier(x1, y1, x2, y2, steps=WIRE_STEPS):
+    """Sample a horizontal cubic Bezier from one port to the other.
+
+    The first version drew two right angles joined by ``smooth=True``, which
+    kinks whenever the two ports are close vertically. A cubic whose control
+    points leave each port horizontally always leaves the wire tangent to the
+    port it starts from, which is what makes a graph readable at a glance.
+    """
+    # The pull scales with the horizontal gap so short links stay tight and
+    # long ones sweep, but it never collapses when two nodes are stacked.
+    pull = max(45.0, min(160.0, abs(x2 - x1) * 0.55))
+    cx1, cy1 = x1 + pull, y1
+    cx2, cy2 = x2 - pull, y2
+    points = []
+    for i in range(steps + 1):
+        u = i / steps
+        v = 1.0 - u
+        a, b, c, d = v**3, 3 * v * v * u, 3 * v * u * u, u**3
+        points.append(a * x1 + b * cx1 + c * cx2 + d * x2)
+        points.append(a * y1 + b * cy1 + c * cy2 + d * y2)
+    return points
 
 
 class NodeEditorTab(tk.Frame):
@@ -68,90 +116,18 @@ class NodeEditorTab(tk.Frame):
         self._build_ui()
         self.after(200, self._load_last_preset)
     def _build_ui(self):
-        tb = tk.Frame(self, bg=SURFACE, pady=6, padx=10)
-        tb.pack(fill="x")
-        self._lbl_title = tr(tk.Label(tb, bg=SURFACE, fg=PRIMARY,
-                 font=("Segoe UI", 9, "bold")), "node_editor_title")
-        self._lbl_title.pack(side="left")
-        self._lbl_hint = tr(tk.Label(tb,
-
-            bg=SURFACE, fg=MUTED, font=("Segoe UI", 7)), "node_editor_hint")
-        self._lbl_hint.pack(side="left", padx=(8,0))
-        self._btn_clear = tr(tk.Button(tb, bg=SURFACE2, fg=MUTED,
-                  relief="flat", font=("Segoe UI", 9), padx=8, pady=3,
-                  cursor="hand2", command=self._clear_all), "clear_all")
-        self._btn_clear.pack(side="right", padx=(6,0))
-        self._btn_preview = tr(tk.Button(tb, bg=PRIMARY, fg="#0f3638",
-                  activebackground=PRIMARY_H, activeforeground="#0f3638",
-                  relief="flat", font=("Segoe UI", 9, "bold"), padx=10, pady=3,
-                  cursor="hand2", command=self._show_preview), "click_preview")
-        self._btn_preview.pack(side="right", padx=(6,0))
-        self._btn_reset_view = tr(tk.Button(tb, bg=SURFACE2, fg=MUTED,
-                  relief="flat", font=("Segoe UI", 9), padx=8, pady=3,
-                  cursor="hand2", command=self._reset_view), "reset_view")
-        self._btn_reset_view.pack(side="right", padx=(0,6))
-        tk.Frame(tb, bg=BORDER, width=1).pack(side="right", fill="y", pady=4, padx=6)
-        self._preset_name_var = tk.StringVar(value=t("no_files_indexed"))
-        self._preset_dirty = False
-        pbar = tk.Frame(tb, bg=SURFACE)
-        pbar.pack(side="right", fill="y")
-
-        def pbtn(text, fg, cmd, padx_in=8, bold=False):
-            """Build one uniformly styled preset button in the preset bar."""
-            f = ("Segoe UI", 9, "bold") if bold else ("Segoe UI", 9)
-            return tk.Button(pbar, text=text, bg=SURFACE2, fg=fg,
-                             relief="flat", font=f,
-                             padx=padx_in, pady=0,
-                             cursor="hand2", command=cmd)
-        self._btn_new_preset = tr(tk.Button(pbar, bg=SURFACE2, fg=SUCCESS,
-                  relief="flat", font=("Segoe UI", 9),
-                  padx=8, pady=0, cursor="hand2",
-                  command=self._new_preset), "new_preset")
-        self._btn_new_preset.pack(side="left", padx=(0, 6), fill="y")
-
-        self._preset_del_btn = tk.Button(pbar, text="🗑", bg=SURFACE2, fg=MUTED,
-                  relief="flat", font=("Segoe UI", 9),
-                  padx=8, pady=0, cursor="hand2",
-                  command=self._delete_current_preset)
-        self._preset_del_btn.pack(side="left", padx=(0, 2), fill="y")
-
-        self._btn_save_preset = tr(tk.Button(pbar, bg=SURFACE2, fg=TEXT,
-                  relief="flat", font=("Segoe UI", 9),
-                  padx=8, pady=0, cursor="hand2",
-                  command=self._save_preset), "save_preset")
-        self._btn_save_preset.pack(side="left", padx=(0, 6), fill="y")
-
-        style_cb = ttk.Style()
-        style_cb.configure("Preset.TCombobox",
-            fieldbackground=SURFACE2, background=SURFACE2,
-            foreground=TEXT, selectbackground=SURFACE2,
-            selectforeground=TEXT, arrowcolor=PRIMARY,
-            borderwidth=0, relief="flat")
-        style_cb.map("Preset.TCombobox",
-            fieldbackground=[(("readonly",), SURFACE2)],
-            foreground=[(("readonly",), TEXT)])
-        self._preset_combo_var = tk.StringVar(value="—")
-        self._preset_combo = ttk.Combobox(
-            pbar, textvariable=self._preset_combo_var,
-            state="readonly", width=18,
-            style="Preset.TCombobox",
-            font=("Segoe UI", 9))
-        self._preset_combo.pack(side="left", padx=(0, 4), fill="y")
-        self._preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
-
-        self._preset_dirty_lbl = tk.Label(pbar, text="", bg=SURFACE,
-            fg=ORANGE, font=("Segoe UI", 10, "bold"), width=1)
-        self._preset_dirty_lbl.pack(side="left", fill="y")
+        self._build_toolbar()
 
         main = tk.Frame(self, bg=BG)
         main.pack(fill="both", expand=True)
-        pal_outer = tk.Frame(main, bg=SURFACE, width=205)
+        pal_outer = tk.Frame(main, bg=SURFACE, width=225)
         pal_outer.pack(side="left", fill="y")
         pal_outer.pack_propagate(False)
         self._lbl_palette = tr(tk.Label(pal_outer, bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI", 8, "bold"), pady=8), "palette")
-        self._lbl_palette.pack(fill="x", padx=10)
-        tk.Frame(pal_outer, bg=BORDER, height=1).pack(fill="x")
+                 font=font(SIZE_MICRO, "bold"), pady=SP_M + 2, anchor="w"),
+                 "palette")
+        self._lbl_palette.pack(fill="x", padx=SP_M + SP_S)
+        tk.Frame(pal_outer, bg=BORDER_SOFT, height=1).pack(fill="x")
 
         _pc = tk.Canvas(pal_outer, bg=SURFACE, highlightthickness=0, bd=0)
         _pvsb = ttk.Scrollbar(pal_outer, orient="vertical", command=_pc.yview,
@@ -186,54 +162,67 @@ class NodeEditorTab(tk.Frame):
         self._pal_scrollbar = _pvsb
         self._pal_scroll_fn = _pscroll
         self._pal_update_scroll = _pal_update_scroll
-        pf = tk.Frame(pal, bg=SURFACE)
-        pf.pack(fill="x", padx=8, pady=(8,4))
-        self._lbl_how_to_build = tr(tk.Label(pf, bg=SURFACE, fg=PRIMARY,
-                 font=("Segoe UI", 7, "bold")), "how_to_build")
-        self._lbl_how_to_build.pack(anchor="w", pady=(0,4))
+        # The three-step recipe is the first thing a newcomer needs and the
+        # first thing an expert stops reading, so it is a tinted callout that
+        # is easy to skip rather than prose mixed into the list of nodes.
+        pf_outer = tk.Frame(pal, bg=SURFACE)
+        pf_outer.pack(fill="x", padx=SP_M, pady=(SP_M, SP_S))
+        accent = tk.Frame(pf_outer, bg=PRIMARY, width=3)
+        accent.pack(side="left", fill="y")
+        pf = tk.Frame(pf_outer, bg=SURFACE2, padx=SP_M, pady=SP_M)
+        pf.pack(side="left", fill="both", expand=True)
+        self._lbl_how_to_build = tr(tk.Label(pf, bg=SURFACE2, fg=PRIMARY,
+                 font=font(SIZE_MICRO, "bold")), "how_to_build")
+        self._lbl_how_to_build.pack(anchor="w", pady=(0, SP_S + 1))
         self._lbl_how_to_build_txt = tr(tk.Label(pf,
-
-            bg=SURFACE, fg=MUTED, font=("Segoe UI", 7),
-            justify="left", wraplength=185), "how_to_build_txt")
-        self._lbl_how_to_build_txt.pack(anchor="w", pady=(0,4))
-        tk.Frame(pf, bg=BORDER, height=1).pack(fill="x")
+            bg=SURFACE2, fg=TEXT_DIM, font=font(SIZE_MICRO),
+            justify="left", wraplength=180), "how_to_build_txt")
+        self._lbl_how_to_build_txt.pack(anchor="w")
         self._pal_meta_frame = tk.Frame(pal, bg=SURFACE)
         self._pal_meta_frame.pack(fill="both", expand=True, padx=8, pady=4)
         self._build_palette_meta()
         self._pal_info = tk.Label(pal, text="", bg=SURFACE, fg=MUTED,
-                                  font=("Segoe UI", 7), justify="center", pady=6)
-        self._pal_info.pack(fill="x", padx=6)
+                                  font=font(SIZE_MICRO), justify="center",
+                                  pady=SP_M)
+        self._pal_info.pack(fill="x", padx=SP_M)
         leg = tk.Frame(pal, bg=SURFACE)
-        leg.pack(fill="x", padx=8, pady=(0,8))
-        tk.Frame(leg, bg=BORDER, height=1).pack(fill="x", pady=4)
-        for key, col in [("pal_legend_chain", TEXT),
+        leg.pack(fill="x", padx=SP_M, pady=(0, SP_M))
+        tk.Frame(leg, bg=BORDER_SOFT, height=1).pack(fill="x", pady=SP_M)
+        for key, col in [("pal_legend_chain", TEXT_DIM),
                          ("pal_legend_meta", PRIMARY),
                          ("pal_legend_folder", ORANGE),
                          ("pal_legend_multisel", MUTED),
                          ("pal_legend_cut", MUTED)]:
-            tr(tk.Label(leg, bg=SURFACE, fg=col, font=("Segoe UI", 7)), key).pack(anchor="w")
+            tr(tk.Label(leg, bg=SURFACE, fg=col, font=font(SIZE_MICRO)),
+               key).pack(anchor="w", pady=1)
         cf = tk.Frame(main, bg=BG)
         cf.pack(side="left", fill="both", expand=True)
-        self._canvas = tk.Canvas(cf, bg="#171614", highlightthickness=0, cursor="crosshair")
+        self._canvas = tk.Canvas(cf, bg=CANVAS_BG, highlightthickness=0,
+                                 cursor="crosshair")
         self._canvas.pack(fill="both", expand=True)
         self._canvas.bind("<Configure>", lambda e: self._draw_grid())
         self._bind_canvas_events()
-        self._hint = self._lbl_drag_hint = tr(tk.Label(cf,
-
-            bg="#171614", fg=MUTED, font=("Segoe UI", 10)), "drag_nodes_hint")
+        # The empty state names the gesture rather than the concept: an empty
+        # dark rectangle gives no clue that the palette is draggable at all.
+        self._hint = tk.Frame(cf, bg=CANVAS_BG)
+        tk.Label(self._hint, text="🗂", bg=CANVAS_BG, fg=BORDER,
+                 font=font(38)).pack()
+        self._lbl_drag_hint = tr(tk.Label(self._hint, bg=CANVAS_BG, fg=MUTED,
+            font=font(SIZE_BODY), justify="center"), "drag_nodes_hint")
+        self._lbl_drag_hint.pack(pady=(SP_M, 0))
         self._hint.place(relx=0.5, rely=0.5, anchor="center")
-        pv = tk.Frame(main, bg=SURFACE, width=285)
+        pv = tk.Frame(main, bg=SURFACE, width=300)
         pv.pack(side="right", fill="y")
         pv.pack_propagate(False)
         self._lbl_preview_struct = tr(tk.Label(pv, bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI", 8, "bold"), pady=8), "preview_structure")
-        self._lbl_preview_struct.pack(fill="x", padx=8)
-        tk.Frame(pv, bg=BORDER, height=1).pack(fill="x")
+                 font=font(SIZE_MICRO, "bold"), pady=SP_M + 2, anchor="w"),
+                 "preview_structure")
+        self._lbl_preview_struct.pack(fill="x", padx=SP_M + SP_S)
+        tk.Frame(pv, bg=BORDER_SOFT, height=1).pack(fill="x")
         self._chain_lbl = tr(tk.Label(pv,
-
-            bg=SURFACE, fg=MUTED, font=("Segoe UI", 8),
-            justify="center", pady=10, wraplength=265), "chain_click")
-        self._chain_lbl.pack(fill="x", padx=6)
+            bg=SURFACE, fg=TEXT_DIM, font=font(SIZE_MICRO),
+            justify="center", pady=SP_M + 2, wraplength=275), "chain_click")
+        self._chain_lbl.pack(fill="x", padx=SP_M)
         tf = tk.Frame(pv, bg=SURFACE)
         tf.pack(fill="both", expand=True)
         self._prev_tree = ttk.Treeview(tf, show="tree headings",
@@ -241,16 +230,17 @@ class NodeEditorTab(tk.Frame):
         self._prev_tree["columns"] = ("count",)
         self._prev_tree.heading("#0",    text=t("folder_node"))
         self._prev_tree.heading("count", text=t("col_count"))
-        self._prev_tree.column("#0",    width=195)
-        self._prev_tree.column("count", width=60, anchor="center")
+        self._prev_tree.column("#0",    width=200)
+        self._prev_tree.column("count", width=64, anchor="e")
         vsb = ttk.Scrollbar(tf, orient="vertical", command=self._prev_tree.yview, style="Dark.Vertical.TScrollbar")
         self._prev_tree.configure(yscrollcommand=vsb.set)
         vsb.pack(side="right", fill="y")
         self._prev_tree.pack(fill="both", expand=True)
 
         self._status = tk.StringVar(value=t("canvas_empty"))
-        tk.Label(self, textvariable=self._status, bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI", 8), anchor="w", padx=10, pady=4).pack(fill="x", side="bottom")
+        tk.Label(self, textvariable=self._status, bg=SURFACE, fg=TEXT_DIM,
+                 font=font(SIZE_MICRO), anchor="w", padx=SP_M + SP_S,
+                 pady=SP_S + 1).pack(fill="x", side="bottom")
         self._nodal_prog_var = tk.IntVar(value=0)
         self._nodal_prog_frame = tk.Frame(self, bg=SURFACE, height=4)
         self._nodal_prog_frame.pack(fill="x", side="bottom")
@@ -258,6 +248,97 @@ class NodeEditorTab(tk.Frame):
         self._nodal_prog_inner = tk.Frame(self._nodal_prog_frame, bg=PRIMARY, height=4)
         self._nodal_prog_inner.place(x=0, y=0, relwidth=0.0, height=4)
         self._nodal_prog_var.trace_add("write", self._update_nodal_prog_bar)
+    def _build_toolbar(self):
+        """The strip above the canvas: identity on the left, actions on the right.
+
+        The actions are grouped by what they act on -- the preset, then the
+        view, then the graph -- with a rule between the groups, so the two
+        destructive ones never sit against the one used constantly.
+        """
+        tb = tk.Frame(self, bg=SURFACE, pady=SP_M, padx=SP_M + SP_S)
+        tb.pack(fill="x")
+        tk.Frame(self, bg=BORDER_SOFT, height=1).pack(fill="x")
+
+        self._lbl_title = tr(tk.Label(tb, bg=SURFACE, fg=PRIMARY,
+                 font=font(SIZE_H2, "bold")), "node_editor_title")
+        self._lbl_title.pack(side="left")
+        self._lbl_hint = tr(tk.Label(tb, bg=SURFACE, fg=MUTED,
+            font=font(SIZE_MICRO)), "node_editor_hint")
+        self._lbl_hint.pack(side="left", padx=(SP_M + 2, 0))
+
+        def rule():
+            tk.Frame(tb, bg=BORDER, width=1).pack(side="right", fill="y",
+                                                  pady=SP_S, padx=SP_M)
+
+        self._btn_clear = tr(button(tb, variant="ghost", size=SIZE_SMALL,
+                  fg=DANGER, padx=SP_M, pady=SP_S + 1,
+                  command=self._clear_all), "clear_all")
+        self._btn_clear.pack(side="right", padx=(SP_S + 2, 0))
+        Tooltip(self._btn_clear, lambda: t("tip_clear_all"))
+
+        self._btn_preview = tr(button(tb, variant="primary", size=SIZE_SMALL,
+                  bold=True, padx=SP_M + 4, pady=SP_S + 1,
+                  command=self._show_preview), "click_preview")
+        self._btn_preview.pack(side="right", padx=(SP_S + 2, 0))
+        Tooltip(self._btn_preview, lambda: t("tip_preview_structure"))
+        rule()
+
+        self._btn_reset_view = tr(button(tb, variant="ghost", size=SIZE_SMALL,
+                  fg=MUTED, padx=SP_M, pady=SP_S + 1,
+                  command=self._reset_view), "reset_view")
+        self._btn_reset_view.pack(side="right")
+        Tooltip(self._btn_reset_view, lambda: t("tip_reset_view"))
+        rule()
+
+        self._preset_name_var = tk.StringVar(value=t("no_files_indexed"))
+        self._preset_dirty = False
+        pbar = tk.Frame(tb, bg=SURFACE)
+        pbar.pack(side="right", fill="y")
+
+        self._preset_dirty_lbl = tk.Label(pbar, text="", bg=SURFACE,
+            fg=ORANGE, font=font(SIZE_H2, "bold"), width=1)
+        self._preset_dirty_lbl.pack(side="right", fill="y")
+        Tooltip(self._preset_dirty_lbl,
+                lambda: t("tip_unsaved") if self._preset_dirty else None)
+
+        self._btn_new_preset = tr(button(pbar, variant="ghost", size=SIZE_SMALL,
+                  fg=SUCCESS, padx=SP_M, pady=SP_S + 1,
+                  command=self._new_preset), "new_preset")
+        self._btn_new_preset.pack(side="left", padx=(0, SP_S))
+        Tooltip(self._btn_new_preset, lambda: t("tip_new_preset"))
+
+        style_cb = ttk.Style()
+        style_cb.configure("Preset.TCombobox",
+            fieldbackground=SURFACE2, background=SURFACE2,
+            foreground=TEXT, selectbackground=SURFACE2,
+            selectforeground=TEXT, arrowcolor=PRIMARY,
+            borderwidth=0, relief="flat", padding=(6, 4))
+        style_cb.map("Preset.TCombobox",
+            fieldbackground=[(("readonly",), SURFACE2)],
+            background=[(("active",), SURFACE3)],
+            foreground=[(("readonly",), TEXT)])
+        self._preset_combo_var = tk.StringVar(value="—")
+        self._preset_combo = ttk.Combobox(
+            pbar, textvariable=self._preset_combo_var,
+            state="readonly", width=18,
+            style="Preset.TCombobox",
+            font=font(SIZE_SMALL))
+        self._preset_combo.pack(side="left", padx=(0, SP_S))
+        self._preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
+        Tooltip(self._preset_combo, lambda: t("tip_preset_combo"))
+
+        self._btn_save_preset = tr(button(pbar, variant="ghost", size=SIZE_SMALL,
+                  padx=SP_M, pady=SP_S + 1,
+                  command=self._save_preset), "save_preset")
+        self._btn_save_preset.pack(side="left", padx=(0, SP_S))
+        Tooltip(self._btn_save_preset, lambda: t("tip_save_preset"))
+
+        self._preset_del_btn = button(pbar, text="🗑", variant="ghost",
+                  size=SIZE_SMALL, fg=MUTED, padx=SP_M, pady=SP_S + 1,
+                  command=self._delete_current_preset)
+        self._preset_del_btn.pack(side="left", padx=(0, SP_M))
+        Tooltip(self._preset_del_btn, lambda: t("tip_delete_preset"))
+
     def _pal_yscroll_cb(self, first, last):
         """yscrollcommand handler: forward to the scrollbar and hide it when unused."""
         if hasattr(self, "_pal_scrollbar"):
@@ -269,44 +350,60 @@ class NodeEditorTab(tk.Frame):
         for c in w.winfo_children():
             self._bind_pal_scroll(c)
 
+    def _palette_item(self, text, color):
+        """One draggable entry in the palette.
+
+        A coloured bar down the left edge carries the family of the node, so
+        the palette can be read by shape and colour before it is read by word
+        -- the same cue the node itself uses once it is on the canvas.
+        """
+        row = tk.Frame(self._pal_meta_frame, bg=SURFACE2)
+        row.pack(fill="x", pady=1)
+        tk.Frame(row, bg=color, width=3).pack(side="left", fill="y")
+        btn = tk.Button(row, text=text, bg=SURFACE2, fg=color, relief="flat",
+                        bd=0, highlightthickness=0, font=font(SIZE_MICRO),
+                        padx=SP_M, pady=SP_S + 1, cursor="hand2", anchor="w")
+        btn.pack(side="left", fill="x", expand=True)
+        hover(btn, SURFACE2, SURFACE3, color, color)
+        btn.bind("<Enter>", lambda _e: row.config(bg=SURFACE3), add="+")
+        btn.bind("<Leave>", lambda _e: row.config(bg=SURFACE2), add="+")
+        return btn
+
+    def _palette_heading(self, key, color, upper=False):
+        lbl = tk.Label(self._pal_meta_frame, bg=SURFACE, fg=color,
+                       font=font(SIZE_MICRO, "bold"), anchor="w")
+        lbl.pack(anchor="w", fill="x", pady=(SP_M, SP_XS))
+        if upper:
+            lbl.config(text=t(key).upper())
+        else:
+            tr(lbl, key)
+        return lbl
+
     def _build_palette_meta(self):
         for w in self._pal_meta_frame.winfo_children():
             w.destroy()
-        tr(tk.Label(self._pal_meta_frame, bg=SURFACE, fg=COLOR_FOLDER,
-                 font=("Segoe UI", 7, "bold")), "structure_label").pack(anchor="w", pady=(4,2))
-        btn_f = tr(tk.Button(self._pal_meta_frame,
-            bg=SURFACE2, fg=COLOR_FOLDER, relief="flat", font=("Segoe UI", 8),
-            padx=6, pady=3, cursor="hand2", anchor="w",
-            activebackground=BORDER, activeforeground=COLOR_FOLDER,
-            command=self._add_folder_node), "folder_node")
-        btn_f.pack(fill="x", pady=1)
+        self._palette_heading("structure_label", COLOR_FOLDER)
+        btn_f = tr(self._palette_item("", COLOR_FOLDER), "folder_node")
+        btn_f.config(command=self._add_folder_node)
+        Tooltip(btn_f, lambda: t("tip_palette_folder"))
         self._bind_palette_dnd_folder(btn_f)
-        tr(tk.Label(self._pal_meta_frame, bg=SURFACE, fg=COLOR_LIANT,
-                 font=("Segoe UI", 7, "bold")), "connector_label").pack(anchor="w", pady=(6,2))
-        btn_l = tr(tk.Button(self._pal_meta_frame,
 
-            bg=SURFACE2, fg=COLOR_LIANT, relief="flat", font=("Segoe UI", 8),
-            padx=6, pady=3, cursor="hand2", anchor="w",
-            activebackground=BORDER, activeforeground=COLOR_LIANT,
-            command=self._add_liant_node), "connector_btn")
-        btn_l.pack(fill="x", pady=1)
+        self._palette_heading("connector_label", COLOR_LIANT)
+        btn_l = tr(self._palette_item("", COLOR_LIANT), "connector_btn")
+        btn_l.config(command=self._add_liant_node)
+        Tooltip(btn_l, lambda: t("tip_palette_connector"))
         self._bind_palette_dnd_liant(btn_l)
-        tr(tk.Label(self._pal_meta_frame, bg=SURFACE, fg=COLOR_ARGUMENT,
-                 font=("Segoe UI", 7, "bold")), "arguments_label").pack(anchor="w", pady=(6,2))
+
+        self._palette_heading("arguments_label", COLOR_ARGUMENT)
         for section_key, keys in fields.PALETTE_SECTIONS:
-            tk.Label(self._pal_meta_frame, text=t(section_key).upper(), bg=SURFACE, fg=MUTED,
-                     font=("Segoe UI", 6, "bold"), pady=2).pack(anchor="w", fill="x")
+            self._palette_heading(section_key, MUTED, upper=True)
             for k in keys:
                 color = fields.color(k)
                 badge = f"  ({self._uv_cache[k]})" if k in self._uv_cache else ""
-                btn   = tk.Button(self._pal_meta_frame,
-                                  text=f"📌  {fields.label(k)}{badge}",
-                                  bg=SURFACE2, fg=color,
-                                  relief="flat", font=("Segoe UI", 8), padx=6, pady=3,
-                                  cursor="hand2", anchor="w",
-                                  activebackground=BORDER, activeforeground=color,
-                                  command=lambda key=k: self._add_argument_node(key))
-                btn.pack(fill="x", pady=1)
+                btn = self._palette_item(f"📌  {fields.label(k)}{badge}", color)
+                btn.config(command=lambda key=k: self._add_argument_node(key))
+                Tooltip(btn, lambda key=k: t("tip_palette_arg",
+                                             n=self._uv_cache.get(key, 0)))
                 self._bind_palette_dnd(btn, k)
         self._bind_pal_scroll(self._pal_meta_frame)
         if hasattr(self, '_pal_update_scroll'): self._pal_update_scroll()
@@ -354,11 +451,11 @@ class NodeEditorTab(tk.Frame):
                 if _state["ghost"] is None:
                     _state["ghost"] = self._canvas.create_rectangle(
                         cx, cy, cx + Node.NW, cy + Node.NH,
-                        outline=ghost_color, fill="#1c1b19", width=2, dash=(6,3), tags="pal_ghost")
+                        outline=ghost_color, fill=SURFACE, width=2, dash=(6, 3), tags="pal_ghost")
                     _state["ghost_lbl"] = self._canvas.create_text(
                         cx + Node.NW//2, cy + Node.NH//2,
                         text=f"📌  {fields.label(type_key)}", fill=ghost_color,
-                        font=("Segoe UI", 8), tags="pal_ghost")
+                        font=font(SIZE_MICRO), tags="pal_ghost")
                 else:
                     self._canvas.coords(_state["ghost"], cx, cy, cx+Node.NW, cy+Node.NH)
                     self._canvas.coords(_state["ghost_lbl"], cx+Node.NW//2, cy+Node.NH//2)
@@ -376,7 +473,7 @@ class NodeEditorTab(tk.Frame):
             cx = abs_x - self._canvas.winfo_rootx()
             cy = abs_y - self._canvas.winfo_rooty()
             if 0 <= cx <= self._canvas.winfo_width() and 0 <= cy <= self._canvas.winfo_height():
-                if self._hint: self._hint.place_forget()
+                self._set_hint_visible(False)
                 nid = self._next_id; self._next_id += 1
                 drop_x = max(10, cx - Node.NW//2); drop_y = max(10, cy - Node.NH//2)
                 self._nodes[nid] = Node(self._canvas, nid, "argument", type_key, drop_x, drop_y)
@@ -405,11 +502,11 @@ class NodeEditorTab(tk.Frame):
                 if _state["ghost"] is None:
                     _state["ghost"] = self._canvas.create_rectangle(
                         cx, cy, cx+Node.NW, cy+Node.NH,
-                        outline=COLOR_FOLDER, fill="#1c1b19", width=2, dash=(6,3), tags="pal_ghost")
+                        outline=COLOR_FOLDER, fill=SURFACE, width=2, dash=(6, 3), tags="pal_ghost")
                     _state["ghost_lbl"] = self._canvas.create_text(
                         cx+Node.NW//2, cy+Node.NH//2,
                         text=t("folder_node"), fill=COLOR_FOLDER,
-                        font=("Segoe UI", 8), tags="pal_ghost")
+                        font=font(SIZE_MICRO), tags="pal_ghost")
                 else:
                     self._canvas.coords(_state["ghost"], cx, cy, cx+Node.NW, cy+Node.NH)
                     self._canvas.coords(_state["ghost_lbl"], cx+Node.NW//2, cy+Node.NH//2)
@@ -427,7 +524,7 @@ class NodeEditorTab(tk.Frame):
             cx = abs_x - self._canvas.winfo_rootx()
             cy = abs_y - self._canvas.winfo_rooty()
             if 0 <= cx <= self._canvas.winfo_width() and 0 <= cy <= self._canvas.winfo_height():
-                if self._hint: self._hint.place_forget()
+                self._set_hint_visible(False)
                 nid = self._next_id; self._next_id += 1
                 drop_x = max(10, cx - Node.NW//2); drop_y = max(10, cy - Node.NH//2)
                 self._nodes[nid] = Node(self._canvas, nid, "folder", None, drop_x, drop_y)
@@ -456,11 +553,11 @@ class NodeEditorTab(tk.Frame):
                 if _state["ghost"] is None:
                     _state["ghost"] = self._canvas.create_rectangle(
                         cx, cy, cx+Node.NW, cy+Node.NH,
-                        outline=COLOR_LIANT, fill="#1c1b19", width=2, dash=(6,3), tags="pal_ghost")
+                        outline=COLOR_LIANT, fill=SURFACE, width=2, dash=(6, 3), tags="pal_ghost")
                     _state["ghost_lbl"] = self._canvas.create_text(
                         cx+Node.NW//2, cy+Node.NH//2,
                         text=t("connector_canvas"), fill=COLOR_LIANT,
-                        font=("Segoe UI", 8), tags="pal_ghost")
+                        font=font(SIZE_MICRO), tags="pal_ghost")
                 else:
                     self._canvas.coords(_state["ghost"], cx, cy, cx+Node.NW, cy+Node.NH)
                     self._canvas.coords(_state["ghost_lbl"], cx+Node.NW//2, cy+Node.NH//2)
@@ -478,7 +575,7 @@ class NodeEditorTab(tk.Frame):
             cx = abs_x - self._canvas.winfo_rootx()
             cy = abs_y - self._canvas.winfo_rooty()
             if 0 <= cx <= self._canvas.winfo_width() and 0 <= cy <= self._canvas.winfo_height():
-                if self._hint: self._hint.place_forget()
+                self._set_hint_visible(False)
                 nid = self._next_id; self._next_id += 1
                 drop_x = max(10, cx - Node.NW//2); drop_y = max(10, cy - Node.NH//2)
                 self._nodes[nid] = Node(self._canvas, nid, "liant", None, drop_x, drop_y)
@@ -494,19 +591,49 @@ class NodeEditorTab(tk.Frame):
         tr(self._pal_info, "files_indexed", n=n)
         if hasattr(self, '_pal_update_scroll'): self._pal_update_scroll()
 
+    #: Fine mesh, and one stronger line every N cells.
+    GRID_STEP = 26
+    GRID_MAJOR_EVERY = 5
+
+    def _set_hint_visible(self, visible: bool):
+        """Show or hide the empty-canvas guidance.
+
+        It used to be destroyed the first time a node appeared, which meant a
+        later "clear all" left the canvas blank with nothing to explain it.
+        Hiding rather than destroying is what lets the empty state come back.
+        """
+        hint = getattr(self, "_hint", None)
+        if hint is None:
+            return
+        if visible and not self._nodes:
+            hint.place(relx=0.5, rely=0.5, anchor="center")
+        else:
+            hint.place_forget()
+
     def _draw_grid(self):
+        """Repaint the canvas mesh.
+
+        Two densities rather than one: a uniform mesh gives no sense of
+        distance when panning, whereas a stronger line every few cells reads
+        as a ruler and makes a drag across the canvas legible.
+        """
         self._canvas.delete("grid")
         self.update_idletasks()
         w = self._canvas.winfo_width()  or 1200
         h = self._canvas.winfo_height() or 800
-        for x in range(0, w, 40): self._canvas.create_line(x, 0, x, h, fill="#1e1d1b", tags="grid")
-        for y in range(0, h, 40): self._canvas.create_line(0, y, w, y, fill="#1e1d1b", tags="grid")
+        step  = self.GRID_STEP
+        major = step * self.GRID_MAJOR_EVERY
+        for x in range(0, w, step):
+            col = CANVAS_GRID_MAJOR if x % major == 0 else CANVAS_GRID
+            self._canvas.create_line(x, 0, x, h, fill=col, tags="grid")
+        for y in range(0, h, step):
+            col = CANVAS_GRID_MAJOR if y % major == 0 else CANVAS_GRID
+            self._canvas.create_line(0, y, w, y, fill=col, tags="grid")
         self._canvas.tag_lower("grid")
 
     def _reset_view(self):
         self._canvas_zoom = 1.0
-        Node.NW = 200
-        Node.NH = 90
+        Node.NW, Node.NH = Node.BASE_NW, Node.BASE_NH
         for n in self._nodes.values(): n.draw()
         self._redraw_wires()
         self._draw_grid()
@@ -517,7 +644,7 @@ class NodeEditorTab(tk.Frame):
         return base_x + offset, base_y + offset
 
     def _add_folder_node(self, name=None):
-        if self._hint: self._hint.place_forget()
+        self._set_hint_visible(False)
         x, y = self._next_pos()
         nid = self._next_id; self._next_id += 1
         self._nodes[nid] = Node(self._canvas, nid, "folder", None, x, y,
@@ -525,14 +652,14 @@ class NodeEditorTab(tk.Frame):
         self._update_status()
 
     def _add_argument_node(self, type_key):
-        if self._hint: self._hint.place_forget()
+        self._set_hint_visible(False)
         x, y = self._next_pos()
         nid = self._next_id; self._next_id += 1
         self._nodes[nid] = Node(self._canvas, nid, "argument", type_key, x, y)
         self._update_status()
 
     def _add_liant_node(self, label=None):
-        if self._hint: self._hint.place_forget()
+        self._set_hint_visible(False)
         x, y = self._next_pos()
         nid = self._next_id; self._next_id += 1
         self._nodes[nid] = Node(self._canvas, nid, "liant", None, x, y,
@@ -631,9 +758,7 @@ class NodeEditorTab(tk.Frame):
         self._next_id = data.get("next_id",
             max((nd["id"] for nd in data.get("nodes", [])), default=0) + 1)
         self._redraw_wires()
-        if self._hint:
-            self._hint.place_forget()
-            self._hint = None
+        self._set_hint_visible(False)
         self._update_status()
     def _save_preset(self):
         cur_name = self._preset_name_var.get().strip()
@@ -654,11 +779,11 @@ class NodeEditorTab(tk.Frame):
         win.transient(self)
         win.grab_set()
         tr(tk.Label(win, bg=BG, fg=TEXT,
-                 font=("Segoe UI", 10)), "preset_name_lbl").pack(padx=20, pady=(16,4), anchor="w")
+                 font=font(SIZE_BODY)), "preset_name_lbl").pack(padx=20, pady=(16,4), anchor="w")
         var = tk.StringVar(value="")
         entry = tk.Entry(win, textvariable=var, bg=SURFACE2, fg=TEXT,
                          insertbackground=TEXT, relief="flat",
-                         font=("Segoe UI", 11), width=28)
+                         font=font(SIZE_H1), width=28)
         entry.pack(padx=20, ipady=6, fill="x")
         entry.select_range(0, "end")
         entry.focus_set()
@@ -666,12 +791,12 @@ class NodeEditorTab(tk.Frame):
         presets = self._list_presets()
         if presets:
             tr(tk.Label(win, bg=BG, fg=MUTED,
-                     font=("Segoe UI", 8)), "overwrite_lbl").pack(padx=20, pady=(8,2), anchor="w")
+                     font=font(SIZE_MICRO)), "overwrite_lbl").pack(padx=20, pady=(8,2), anchor="w")
             lb_frame = tk.Frame(win, bg=SURFACE2)
             lb_frame.pack(padx=20, fill="x")
             lb = tk.Listbox(lb_frame, bg=SURFACE2, fg=TEXT,
-                            selectbackground=PRIMARY_H, selectforeground="#0f3638",
-                            relief="flat", font=("Segoe UI", 9),
+                            selectbackground=PRIMARY_H, selectforeground=ON_ACCENT,
+                            relief="flat", font=font(SIZE_SMALL),
                             height=min(5, len(presets)), activestyle="none")
             for p in presets:
                 lb.insert("end", p)
@@ -679,7 +804,7 @@ class NodeEditorTab(tk.Frame):
             lb.bind("<<ListboxSelect>>",
                 lambda e: var.set(lb.get(lb.curselection()[0])) if lb.curselection() else None)
 
-        err_lbl = tk.Label(win, text="", bg=BG, fg="#dd6974", font=("Segoe UI", 8))
+        err_lbl = tk.Label(win, text="", bg=BG, fg=DANGER, font=font(SIZE_MICRO))
         err_lbl.pack(padx=20, anchor="w")
         btn_row = tk.Frame(win, bg=BG)
         btn_row.pack(padx=20, pady=(4,16), fill="x")
@@ -702,10 +827,10 @@ class NodeEditorTab(tk.Frame):
 
         entry.bind("<Return>", lambda e: do_save())
         tr(tk.Button(btn_row, bg=SURFACE2, fg=MUTED, relief="flat",
-                  font=("Segoe UI", 9), padx=10, pady=4, cursor="hand2",
+                  font=font(SIZE_SMALL), padx=10, pady=4, cursor="hand2",
                   command=win.destroy), "cancel").pack(side="right", padx=(6,0))
-        tr(tk.Button(btn_row, bg=PRIMARY, fg="#0f3638", relief="flat",
-                  font=("Segoe UI", 9, "bold"), padx=10, pady=4, cursor="hand2",
+        tr(tk.Button(btn_row, bg=PRIMARY, fg=ON_ACCENT, relief="flat",
+                  font=font(SIZE_SMALL, "bold"), padx=10, pady=4, cursor="hand2",
                   command=do_save), "save_preset").pack(side="right")
         win.update_idletasks()
         px = self.winfo_rootx() + self.winfo_width()//2 - win.winfo_width()//2
@@ -843,7 +968,7 @@ class NodeEditorTab(tk.Frame):
         self._selected_nodes.clear(); self._wire_src = None; self._wire_tmp = None
         self._rubber_rect = None
         self._draw_grid()
-        if self._hint: self._hint.place(relx=0.5, rely=0.5, anchor="center")
+        self._set_hint_visible(True)
         self._prev_tree.delete(*self._prev_tree.get_children())
         tr(self._chain_lbl, "chain_click")
         self._last_tree = None; self._update_status()
@@ -865,15 +990,19 @@ class NodeEditorTab(tk.Frame):
         else:  # "chain"
             x1, y1 = sn.port_out_pos(); x2, y2 = dn.port_in_pos()
             col = sn.color
-        cx = (x1 + x2) / 2
-        cid = self._canvas.create_line(x1, y1, cx, y1, cx, y2, x2, y2,
-            fill=col, width=2, smooth=True, splinesteps=32, tags="wire")
+        cid = self._canvas.create_line(
+            *_bezier(x1, y1, x2, y2), fill=col, width=2, smooth=True,
+            splinesteps=6, capstyle="round", tags="wire")
         self._canvas.tag_bind(cid, "<ButtonPress-1>",
             lambda e, c=conn: self._cut_wire(c))
+        # Hovering a wire arms the click that cuts it, so the feedback says
+        # exactly that: it turns the colour of the destructive action.
         self._canvas.tag_bind(cid, "<Enter>",
-            lambda e, cid2=cid: self._canvas.itemconfig(cid2, width=4, fill="#ff4444"))
+            lambda e, cid2=cid: (self._canvas.itemconfig(cid2, width=4, fill=DANGER),
+                                 self._canvas.config(cursor="X_cursor")))
         self._canvas.tag_bind(cid, "<Leave>",
-            lambda e, cid2=cid, col2=col: self._canvas.itemconfig(cid2, width=2, fill=col2))
+            lambda e, cid2=cid, col2=col: (self._canvas.itemconfig(cid2, width=2, fill=col2),
+                                           self._canvas.config(cursor="crosshair")))
         return cid
 
 
@@ -967,11 +1096,10 @@ class NodeEditorTab(tk.Frame):
                     x1, y1 = sn.port_out_pos(); col = sn.color
                 else:
                     x1, y1 = sn.port_out_pos()  # compat; col = ORANGE
-                cx = (x1 + mx) / 2
                 self._wire_tmp = self._canvas.create_line(
-                    x1, y1, cx, y1, cx, my, mx, my,
-                    fill=col, width=2, dash=(6,3), smooth=True,
-                    splinesteps=32, tags="wire_tmp")
+                    *_bezier(x1, y1, mx, my), fill=col, width=2, dash=(6, 3),
+                    smooth=True, splinesteps=6, capstyle="round",
+                    tags="wire_tmp")
             return
         if self._rubber_start is not None and self._drag_node is None:
             if self._rubber_rect: self._canvas.delete(self._rubber_rect)
@@ -1094,8 +1222,8 @@ class NodeEditorTab(tk.Frame):
             new_x = cx + (n.x - cx) * real_factor
             new_y = cy + (n.y - cy) * real_factor
             n.move(new_x - n.x, new_y - n.y)
-        Node.NW = max(100, min(300, int(200 * self._canvas_zoom)))
-        Node.NH = max(45,  min(160, int(90  * self._canvas_zoom)))
+        Node.NW = max(105, min(315, int(Node.BASE_NW * self._canvas_zoom)))
+        Node.NH = max(48,  min(170, int(Node.BASE_NH * self._canvas_zoom)))
         for n in self._nodes.values():
             n.draw()
         self._redraw_wires()
@@ -1121,10 +1249,10 @@ class NodeEditorTab(tk.Frame):
         win.title(t("rename_folder_title")); win.configure(bg=SURFACE)
         win.resizable(False, False); win.geometry("320x120"); win.transient(self)
         tr(tk.Label(win, bg=SURFACE, fg=TEXT,
-                 font=("Segoe UI", 10)), "folder_name_lbl").pack(padx=20, pady=(16,4), anchor="w")
+                 font=font(SIZE_BODY)), "folder_name_lbl").pack(padx=20, pady=(16,4), anchor="w")
         var = tk.StringVar(value=n.label)
         entry = tk.Entry(win, textvariable=var, bg=SURFACE2, fg=TEXT,
-                         insertbackground=TEXT, relief="flat", font=("Segoe UI", 11))
+                         insertbackground=TEXT, relief="flat", font=font(SIZE_H1))
         entry.pack(fill="x", padx=20, ipady=6); entry.select_range(0, "end"); entry.focus_set()
         def confirm(*_):
             v = var.get().strip()
@@ -1134,8 +1262,8 @@ class NodeEditorTab(tk.Frame):
                 n.label_is_default = False  # the user named this folder
             win.destroy()
         entry.bind("<Return>", confirm)
-        tr(tk.Button(win, bg=PRIMARY, fg="#0f3638", relief="flat",
-                  font=("Segoe UI", 10, "bold"), padx=20, pady=4,
+        tr(tk.Button(win, bg=PRIMARY, fg=ON_ACCENT, relief="flat",
+                  font=font(SIZE_BODY, "bold"), padx=20, pady=4,
                   cursor="hand2", command=confirm), "ok").pack(pady=10)
 
     def _open_liant_dialog(self, nid):
@@ -1147,17 +1275,17 @@ class NodeEditorTab(tk.Frame):
         win.title(t("edit_liant_title")); win.configure(bg=SURFACE)
         win.resizable(False, False); win.geometry("340x160"); win.transient(self)
         tr(tk.Label(win, bg=SURFACE, fg=COLOR_LIANT,
-                 font=("Segoe UI", 10, "bold")), "connector_text").pack(padx=20, pady=(16,2), anchor="w")
+                 font=font(SIZE_BODY, "bold")), "connector_text").pack(padx=20, pady=(16,2), anchor="w")
         tr(tk.Label(win,
-                 bg=SURFACE, fg=MUTED, font=("Segoe UI", 8)), "connector_ex").pack(padx=20, anchor="w")
+                 bg=SURFACE, fg=MUTED, font=font(SIZE_MICRO)), "connector_ex").pack(padx=20, anchor="w")
         presets_frame = tk.Frame(win, bg=SURFACE); presets_frame.pack(padx=20, pady=4, anchor="w")
         var = tk.StringVar(value=n.label)
         for lbl, val in [("-","-"),("_","_"),(" "," "),(".",".")]:
             tk.Button(presets_frame, text=repr(lbl), bg=SURFACE2, fg=COLOR_LIANT,
-                      relief="flat", font=("Segoe UI", 8), padx=8, pady=2, cursor="hand2",
+                      relief="flat", font=font(SIZE_MICRO), padx=8, pady=2, cursor="hand2",
                       command=lambda v=val: var.set(v)).pack(side="left", padx=2)
         entry = tk.Entry(win, textvariable=var, bg=SURFACE2, fg=TEXT,
-                         insertbackground=TEXT, relief="flat", font=("Segoe UI", 13))
+                         insertbackground=TEXT, relief="flat", font=font(SIZE_TITLE))
         entry.pack(fill="x", padx=20, ipady=6)
         entry.select_range(0, "end"); entry.focus_set()
         def confirm(*_):
@@ -1166,7 +1294,7 @@ class NodeEditorTab(tk.Frame):
             win.destroy()
         entry.bind("<Return>", confirm)
         tr(tk.Button(win, bg=COLOR_LIANT, fg="white", relief="flat",
-                  font=("Segoe UI", 10, "bold"), padx=20, pady=4,
+                  font=font(SIZE_BODY, "bold"), padx=20, pady=4,
                   cursor="hand2", command=confirm), "ok").pack(pady=8)
 
     def _open_separator_dialog(self, nid):
@@ -1179,34 +1307,34 @@ class NodeEditorTab(tk.Frame):
         win.resizable(False, False); win.transient(self)
 
         tk.Label(win, text=f"📌  {n.display_label}", bg=BG, fg=n.color,
-                 font=("Segoe UI", 11, "bold"), pady=10, padx=16).pack(anchor="w")
+                 font=font(SIZE_H1, "bold"), pady=10, padx=16).pack(anchor="w")
         tr(tk.Label(win,
 
-            bg=BG, fg=MUTED, font=("Segoe UI", 8), justify="left", padx=16), "separator_hint").pack(anchor="w")
+            bg=BG, fg=MUTED, font=font(SIZE_MICRO), justify="left", padx=16), "separator_hint").pack(anchor="w")
         tk.Frame(win, bg=BORDER, height=1).pack(fill="x", pady=6)
 
         sep_var = tk.StringVar(value=n.separator)
         presets = [(t("sep_none"), ""), (t("sep_dash"), "-"), ("Underscore _", "_"),
                    (t("sep_space"), " "), (t("sep_dot"), ".")]
         tr(tk.Label(win, bg=BG, fg=TEXT,
-                 font=("Segoe UI", 9, "bold"), padx=16), "presets_lbl").pack(anchor="w")
+                 font=font(SIZE_SMALL, "bold"), padx=16), "presets_lbl").pack(anchor="w")
         btn_row = tk.Frame(win, bg=BG); btn_row.pack(fill="x", padx=16, pady=4)
         for lbl, val in presets:
             tk.Button(btn_row, text=lbl, bg=SURFACE2, fg=TEXT, relief="flat",
-                      font=("Segoe UI", 8), padx=8, pady=4, cursor="hand2",
+                      font=font(SIZE_MICRO), padx=8, pady=4, cursor="hand2",
                       command=lambda v=val: sep_var.set(v)).pack(side="left", padx=2)
 
         tr(tk.Label(win, bg=BG, fg=TEXT,
-                 font=("Segoe UI", 9), padx=16), "custom_lbl").pack(anchor="w", pady=(8,2))
+                 font=font(SIZE_SMALL), padx=16), "custom_lbl").pack(anchor="w", pady=(8,2))
         ent_row = tk.Frame(win, bg=BG); ent_row.pack(fill="x", padx=16, pady=(0,8))
         entry = tk.Entry(ent_row, textvariable=sep_var, bg=SURFACE2, fg=TEXT,
                          insertbackground=TEXT, relief="flat",
-                         font=("Segoe UI", 12), width=8)
+                         font=font(SIZE_H1), width=8)
         entry.pack(side="left", ipady=5)
 
         prev_frame = tk.Frame(win, bg=SURFACE, pady=6); prev_frame.pack(fill="x")
         prev_lbl = tk.Label(prev_frame, text="", bg=SURFACE, fg=PRIMARY,
-                            font=("Segoe UI", 9, "bold"), padx=16)
+                            font=font(SIZE_SMALL, "bold"), padx=16)
         prev_lbl.pack(anchor="w")
         _examples = {
             "exif_annee":"2026", "exif_mois":"04", "exif_jour":"26",
@@ -1226,10 +1354,10 @@ class NodeEditorTab(tk.Frame):
             self._mark_dirty(); n.separator = sep_var.get()
             n.draw(); self._redraw_wires(); win.destroy()
         tr(tk.Button(btn_f, bg=SURFACE2, fg=MUTED, relief="flat",
-                  font=("Segoe UI", 9), padx=10, pady=5, cursor="hand2",
+                  font=font(SIZE_SMALL), padx=10, pady=5, cursor="hand2",
                   command=win.destroy), "cancel").pack(side="right", padx=(6,0))
-        tr(tk.Button(btn_f, bg=PRIMARY, fg="#0f3638", relief="flat",
-                  font=("Segoe UI", 9, "bold"), padx=10, pady=5, cursor="hand2",
+        tr(tk.Button(btn_f, bg=PRIMARY, fg=ON_ACCENT, relief="flat",
+                  font=font(SIZE_SMALL, "bold"), padx=10, pady=5, cursor="hand2",
                   command=apply), "apply_btn").pack(side="right")
         win.update_idletasks()
         px = self.winfo_rootx() + self.winfo_width()//2 - win.winfo_width()//2

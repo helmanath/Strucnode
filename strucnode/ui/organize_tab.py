@@ -15,16 +15,32 @@ from ..core.planner import build_plan, destination_is_inside, free_space
 from ..i18n import set_raw, t, tr, tr_var
 from ..theme import (
     BG,
+    BLUE,
     BORDER,
+    BORDER_SOFT,
     EXTENSION_COLORS,
     MUTED,
+    ON_ACCENT,
     ORANGE,
     PRIMARY,
-    PRIMARY_H,
+    PURPLE,
+    SIZE_BODY,
+    SIZE_H2,
+    SIZE_MICRO,
+    SIZE_SMALL,
+    SP_M,
+    SP_S,
+    SP_XS,
     SUCCESS,
     SURFACE,
     SURFACE2,
+    SURFACE3,
     TEXT,
+    TEXT_DIM,
+    Tooltip,
+    button,
+    font,
+    hover,
 )
 
 log = logging.getLogger(__name__)
@@ -47,15 +63,15 @@ class OrganizeTab(tk.Frame):
         self._build_ui()
 
     def _build_ui(self):
-        tb = tk.Frame(self, bg=SURFACE, pady=8, padx=14)
+        tb = tk.Frame(self, bg=SURFACE, pady=SP_M, padx=SP_M + SP_S)
         tb.pack(fill="x")
+        tk.Frame(self, bg=BORDER_SOFT, height=1).pack(fill="x")
         self._lbl_org_title = tr(tk.Label(tb, bg=SURFACE, fg=PRIMARY,
-                 font=("Segoe UI", 9, "bold")), "organize_title")
+                 font=font(SIZE_H2, "bold")), "organize_title")
         self._lbl_org_title.pack(side="left")
-        self._lbl_org_hint = tr(tk.Label(tb,
-                 
-                 bg=SURFACE, fg=MUTED, font=("Segoe UI", 8)), "organize_hint")
-        self._lbl_org_hint.pack(side="left")
+        self._lbl_org_hint = tr(tk.Label(tb, bg=SURFACE, fg=MUTED,
+                 font=font(SIZE_MICRO)), "organize_hint")
+        self._lbl_org_hint.pack(side="left", padx=(SP_M + 2, 0))
 
         main = tk.Frame(self, bg=BG)
         main.pack(fill="both", expand=True, padx=14, pady=10)
@@ -91,40 +107,51 @@ class OrganizeTab(tk.Frame):
         _lc.bind("<MouseWheel>", _lscroll)
         left.bind("<MouseWheel>", _lscroll)
 
+        #: Numbered, because the left rail is a sequence: pick a structure,
+        #: then what to include, then what to do, then where. Without the
+        #: numbers the four blocks read as four independent settings.
+        self._section_index = 0
+
         def section(parent, key):
-            """A titled block; the title is bound to *key*, never re-applied by hand."""
+            """A numbered, titled block; the title stays bound to *key*."""
+            self._section_index += 1
             f = tk.Frame(parent, bg=SURFACE)
-            f.pack(fill="x", padx=14, pady=(14,0))
+            f.pack(fill="x", padx=SP_M + SP_S, pady=(SP_M + SP_S, 0))
             f.bind("<MouseWheel>", _lscroll)
-            tr(tk.Label(f, bg=SURFACE, fg=MUTED,
-                        font=("Segoe UI", 7, "bold")), key).pack(anchor="w")
-            tk.Frame(f, bg=BORDER, height=1).pack(fill="x", pady=4)
+            head = tk.Frame(f, bg=SURFACE)
+            head.pack(fill="x")
+            tk.Label(head, text=str(self._section_index), bg=SURFACE2, fg=PRIMARY,
+                     font=font(SIZE_MICRO, "bold"), width=2,
+                     pady=1).pack(side="left", padx=(0, SP_M))
+            tr(tk.Label(head, bg=SURFACE, fg=MUTED,
+                        font=font(SIZE_MICRO, "bold")), key).pack(side="left")
+            tk.Frame(f, bg=BORDER_SOFT, height=1).pack(fill="x", pady=(SP_M, SP_S))
             return f
         self._s_struct = s1 = section(left, "nodal_structure")
         self._struct_lbl = tr(tk.Label(s1,
-            
-            bg=SURFACE, fg=MUTED, font=("Segoe UI", 8), justify="left", wraplength=320), "no_structure")
+
+            bg=SURFACE, fg=MUTED, font=font(SIZE_MICRO), justify="left", wraplength=320), "no_structure")
         self._struct_lbl.pack(anchor="w", pady=4)
-        self._load_btn = tr(tk.Button(s1, 
-                  bg=SURFACE2, fg=PRIMARY, relief="flat",
-                  font=("Segoe UI", 9), padx=8, pady=5,
-                  cursor="hand2", command=self._load_structure), "load_structure")
-        self._load_btn.pack(fill="x", pady=(4,0))
+        self._load_btn = tr(button(s1, variant="ghost", size=SIZE_SMALL,
+                  fg=PRIMARY, padx=SP_M, pady=SP_M,
+                  command=self._load_structure), "load_structure")
+        self._load_btn.pack(fill="x", pady=(SP_S, 0))
+        Tooltip(self._load_btn, lambda: t("tip_load_structure"))
         self._s_ext = s_ext = section(left, "sect_ext")
         self._ext_filter_frame = tk.Frame(s_ext, bg=SURFACE)
         self._ext_filter_frame.pack(fill="x", pady=(2,0))
         self._ext_filter_empty_lbl = self._lbl_load_ext = tr(tk.Label(s_ext,
-            
-            bg=SURFACE, fg=MUTED, font=("Segoe UI", 8), justify="left", wraplength=320), "load_ext_hint")
+
+            bg=SURFACE, fg=MUTED, font=font(SIZE_MICRO), justify="left", wraplength=320), "load_ext_hint")
         self._ext_filter_empty_lbl.pack(anchor="w", pady=4)
         ext_btn_row = tk.Frame(s_ext, bg=SURFACE)
         ext_btn_row.pack(fill="x", pady=(4,0))
-        self._btn_check_all = tr(tk.Button(ext_btn_row, bg=SURFACE2, fg=SUCCESS, relief="flat",
-                  font=("Segoe UI", 8), padx=6, pady=2, cursor="hand2",
+        self._btn_check_all = tr(button(ext_btn_row, variant="ghost",
+                  size=SIZE_MICRO, fg=SUCCESS, padx=SP_M, pady=SP_S,
                   command=lambda: self._select_all_exts(True)), "check_all")
-        self._btn_check_all.pack(side="left", padx=(0,4))
-        self._btn_check_none = tr(tk.Button(ext_btn_row, bg=SURFACE2, fg=MUTED, relief="flat",
-                  font=("Segoe UI", 8), padx=6, pady=2, cursor="hand2",
+        self._btn_check_all.pack(side="left", padx=(0, SP_S))
+        self._btn_check_none = tr(button(ext_btn_row, variant="ghost",
+                  size=SIZE_MICRO, fg=MUTED, padx=SP_M, pady=SP_S,
                   command=lambda: self._select_all_exts(False)), "check_none")
         self._btn_check_none.pack(side="left")
         s2 = section(left, "op_section"); self._s_op_section = s2
@@ -132,10 +159,14 @@ class OrganizeTab(tk.Frame):
             (executor.COPY, "sect_mode_copy", SUCCESS),
             (executor.MOVE, "sect_mode_move", ORANGE),
         ]:
-            tr(tk.Radiobutton(s2, variable=self._op_mode, value=val,
+            rb = tr(tk.Radiobutton(s2, variable=self._op_mode, value=val,
                               bg=SURFACE, fg=col, selectcolor=SURFACE2,
-                              activebackground=SURFACE, font=("Segoe UI", 9),
-                              cursor="hand2"), key).pack(anchor="w", pady=2)
+                              activebackground=SURFACE, activeforeground=col,
+                              font=font(SIZE_SMALL), highlightthickness=0,
+                              bd=0, cursor="hand2",
+                              command=self._update_summary), key)
+            rb.pack(anchor="w", pady=SP_XS)
+            hover(rb, SURFACE, SURFACE2)
         self._s_dup = section(left, "dup_section")
         self._dup_mode = tk.StringVar(value=executor.ASK)
         for val, key, col in [
@@ -143,71 +174,83 @@ class OrganizeTab(tk.Frame):
             (executor.SKIP, "dup_skip", MUTED),
             (executor.REPLACE, "dup_replace_auto", ORANGE),
             (executor.RENAME, "dup_rename_auto", PRIMARY),
-            (executor.COMPARE_META, "dup_meta", "#4f98a3"),
-            (executor.COMPARE_FULL, "dup_full_cmp", "#a86fdf"),
+            (executor.COMPARE_META, "dup_meta", BLUE),
+            (executor.COMPARE_FULL, "dup_full_cmp", PURPLE),
         ]:
-            tr(tk.Radiobutton(self._s_dup, variable=self._dup_mode, value=val,
+            rb = tr(tk.Radiobutton(self._s_dup, variable=self._dup_mode, value=val,
                               bg=SURFACE, fg=col, selectcolor=SURFACE2,
-                              activebackground=SURFACE, font=("Segoe UI", 9),
-                              cursor="hand2"), key).pack(anchor="w", pady=1)
+                              activebackground=SURFACE, activeforeground=col,
+                              font=font(SIZE_SMALL), highlightthickness=0,
+                              bd=0, cursor="hand2"), key)
+            rb.pack(anchor="w", pady=1)
+            hover(rb, SURFACE, SURFACE2)
         s3 = section(left, "sect_dest"); self._s_dest = s3
         dr = tk.Frame(s3, bg=SURFACE); dr.pack(fill="x")
-        tk.Entry(dr, textvariable=self._dest_var, bg=SURFACE2, fg=TEXT,
-                 insertbackground=TEXT, relief="flat",
-                 font=("Segoe UI", 9)).pack(side="left", fill="x", expand=True, ipady=5)
-        self._btn_browse = tr(tk.Button(dr, bg=SURFACE2, fg=TEXT, relief="flat",
-                  font=("Segoe UI", 9), padx=8, pady=5,
-                  cursor="hand2", command=self._pick_dest), "browse")
-        self._btn_browse.pack(side="left", padx=(6,0))
+        dest_entry = tk.Entry(dr, textvariable=self._dest_var, bg=SURFACE2,
+                 fg=TEXT, insertbackground=PRIMARY, relief="flat",
+                 highlightthickness=0, font=font(SIZE_SMALL))
+        dest_entry.pack(side="left", fill="x", expand=True, ipady=SP_M)
+        # Typing a destination has to arm the button just as browsing to one
+        # does; before this, a hand-typed path left the button disabled.
+        self._dest_var.trace_add("write", lambda *_: self._on_dest_typed())
+        self._btn_browse = tr(button(dr, variant="ghost", size=SIZE_SMALL,
+                  padx=SP_M, pady=SP_M,
+                  command=self._pick_dest), "browse")
+        self._btn_browse.pack(side="left", padx=(SP_M, 0))
         s4 = section(left, "summary_section"); self._s_summary_section = s4
-        self._summary_lbl = tk.Label(s4, text="—", bg=SURFACE, fg=MUTED,
-                                     font=("Segoe UI", 8), justify="left", wraplength=320)
-        self._summary_lbl.pack(anchor="w", pady=4)
+        self._summary_lbl = tk.Label(s4, text="—", bg=SURFACE, fg=TEXT_DIM,
+                                     font=font(SIZE_MICRO), justify="left",
+                                     wraplength=320)
+        self._summary_lbl.pack(anchor="w", pady=SP_S)
         s5 = tk.Frame(left, bg=SURFACE)
-        s5.pack(fill="x", padx=14, pady=(20,14))
+        s5.pack(fill="x", padx=SP_M + SP_S, pady=(SP_M * 2, SP_M + SP_S))
 
         btn_row = tk.Frame(s5, bg=SURFACE)
         btn_row.pack(fill="x")
-        self._run_btn = tr(tk.Button(btn_row, 
-                                  bg=PRIMARY, fg="#0f3638",
-                                  activebackground=PRIMARY_H, activeforeground="#0f3638",
-                                  relief="flat", font=("Segoe UI", 10, "bold"),
-                                  padx=16, pady=8, cursor="hand2",
-                                  command=self._run, state="disabled"), "apply_structure")
+        self._run_btn = tr(button(btn_row, variant="primary", size=SIZE_BODY,
+                                  bold=True, padx=SP_M + SP_S, pady=SP_M + 2,
+                                  command=self._run, state="disabled"),
+                           "apply_structure")
         self._run_btn.pack(side="left", fill="x", expand=True)
-        self._stop_btn = tk.Button(btn_row, text="⏹",
-                                   bg="#a13544", fg="white",
-                                   activebackground="#782b33", activeforeground="white",
-                                   relief="flat", font=("Segoe UI", 11, "bold"),
-                                   padx=10, pady=8, cursor="hand2",
-                                   command=self._request_cancel)
+        self._stop_btn = button(btn_row, text="\u23f9", variant="danger",
+                                size=SIZE_H2, bold=True,
+                                padx=SP_M + 2, pady=SP_M + 2,
+                                command=self._request_cancel)
+        Tooltip(self._stop_btn, lambda: t("tip_stop"))
+        # A greyed-out button that never says why is the most common way to
+        # lose someone here, so the reason it is disabled is always on screen.
+        self._blocked_lbl = tk.Label(s5, text="", bg=SURFACE, fg=ORANGE,
+                                     font=font(SIZE_MICRO), justify="left",
+                                     wraplength=320)
+        self._blocked_lbl.pack(anchor="w", pady=(SP_M, 0))
         self._progress = ttk.Progressbar(s5, mode="determinate",
                                          style="Custom.Horizontal.TProgressbar")
-        self._progress.pack(fill="x", pady=(8,0))
-        self._prog_lbl = tk.Label(s5, text="", bg=SURFACE, fg=MUTED, font=("Segoe UI", 8))
+        self._progress.pack(fill="x", pady=(SP_M, 0))
+        self._prog_lbl = tk.Label(s5, text="", bg=SURFACE, fg=MUTED,
+                                  font=font(SIZE_MICRO))
         self._prog_lbl.pack(anchor="w")
         right = tk.Frame(main, bg=BG)
         right.pack(side="left", fill="both", expand=True)
 
-        hdr = tk.Frame(right, bg=SURFACE, pady=6, padx=10)
+        hdr = tk.Frame(right, bg=SURFACE, pady=SP_M, padx=SP_M + SP_S)
         hdr.pack(fill="x")
         self._lbl_ops_preview = tr(tk.Label(hdr, bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI", 8, "bold")), "ops_preview")
+                 font=font(SIZE_MICRO, "bold")), "ops_preview")
         self._lbl_ops_preview.pack(side="left")
         self._ops_count_lbl = tk.Label(hdr, text="", bg=SURFACE, fg=PRIMARY,
-                                       font=("Segoe UI", 8))
-        self._ops_count_lbl.pack(side="left", padx=8)
+                                       font=font(SIZE_MICRO, "bold"))
+        self._ops_count_lbl.pack(side="left", padx=SP_M + SP_S)
         self._nomatch_count_lbl = tk.Label(hdr, text="", bg=SURFACE, fg=ORANGE,
-                                           font=("Segoe UI", 8))
-        self._nomatch_count_lbl.pack(side="left", padx=4)
+                                           font=font(SIZE_MICRO))
+        self._nomatch_count_lbl.pack(side="left", padx=SP_S)
         style = ttk.Style()
         style.configure("Ops.TNotebook", background=BG, borderwidth=0, tabmargins=0)
         style.configure("Ops.TNotebook.Tab",
-            background=SURFACE2, foreground=MUTED,
-            font=("Segoe UI", 8), padding=(10, 4))
+            background=SURFACE2, foreground=MUTED, borderwidth=0,
+            font=font(SIZE_MICRO), padding=(SP_M + SP_S, SP_M))
         style.map("Ops.TNotebook.Tab",
-            background=[("selected", BG)],
-            foreground=[("selected", TEXT)])
+            background=[("selected", BG), ("active", SURFACE3)],
+            foreground=[("selected", PRIMARY), ("active", TEXT)])
 
         self._ops_notebook = ttk.Notebook(right, style="Ops.TNotebook")
         self._ops_notebook.pack(fill="both", expand=True)
@@ -245,8 +288,9 @@ class OrganizeTab(tk.Frame):
         self._nomatch_tree.pack(fill="both", expand=True)
 
         self._status_var = tk.StringVar(value=t("start_status"))
-        tk.Label(self, textvariable=self._status_var, bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI", 8), anchor="w", padx=10, pady=4).pack(fill="x", side="bottom")
+        tk.Label(self, textvariable=self._status_var, bg=SURFACE, fg=TEXT_DIM,
+                 font=font(SIZE_MICRO), anchor="w", padx=SP_M + SP_S,
+                 pady=SP_S + 1).pack(fill="x", side="bottom")
         self._prog_bar_var = tk.IntVar(value=0)
         self._prog_bar_frame = tk.Frame(self, bg=SURFACE, height=4)
         self._prog_bar_frame.pack(fill="x", side="bottom")
@@ -322,19 +366,27 @@ class OrganizeTab(tk.Frame):
         col_idx = 0
         for cat in sorted(cat_exts.keys()):
             color = EXTENSION_COLORS.get(cat, MUTED)
-            cat_lbl = tr(tk.Label(self._ext_filter_frame, bg=SURFACE, fg=color,
-                                  font=("Segoe UI", 7, "bold")), f"cat_{cat}")
-            cat_lbl.pack(anchor="w", padx=4, pady=(6,1))
+            cat_head = tk.Frame(self._ext_filter_frame, bg=SURFACE)
+            cat_head.pack(anchor="w", fill="x", padx=SP_S, pady=(SP_M, SP_XS))
+            tk.Label(cat_head, text="\u25cf", bg=SURFACE, fg=color,
+                     font=font(SIZE_MICRO)).pack(side="left")
+            cat_lbl = tr(tk.Label(cat_head, bg=SURFACE, fg=color,
+                                  font=font(SIZE_MICRO, "bold")), f"cat_{cat}")
+            cat_lbl.pack(side="left", padx=(SP_S, 0))
             row = tk.Frame(self._ext_filter_frame, bg=SURFACE)
-            row.pack(fill="x", padx=4)
+            row.pack(fill="x", padx=SP_S)
             for col_idx, ext in enumerate(sorted(cat_exts[cat])):
                 var = tk.BooleanVar(value=True)
                 self._ext_filter_vars[ext] = var
                 cb = tk.Checkbutton(row, text=ext.lstrip(".").upper() or "—",
-                                    variable=var, bg=SURFACE, fg=TEXT, selectcolor=SURFACE2,
-                                    activebackground=SURFACE, font=("Segoe UI", 8),
-                                    cursor="hand2", command=self._on_ext_filter_change)
-                cb.grid(row=col_idx // 3, column=col_idx % 3, sticky="w", padx=2)
+                                    variable=var, bg=SURFACE, fg=TEXT_DIM,
+                                    selectcolor=SURFACE2, activebackground=SURFACE,
+                                    activeforeground=TEXT, font=font(SIZE_MICRO),
+                                    highlightthickness=0, bd=0, cursor="hand2",
+                                    command=self._on_ext_filter_change)
+                cb.grid(row=col_idx // 3, column=col_idx % 3, sticky="w",
+                        padx=SP_XS, pady=1)
+                hover(cb, SURFACE, SURFACE2, TEXT_DIM, TEXT)
 
     def _select_all_exts(self, value):
         for var in self._ext_filter_vars.values():
@@ -435,9 +487,33 @@ class OrganizeTab(tk.Frame):
             self._update_summary()
             self._check_ready()
 
+    def _on_dest_typed(self):
+        """React to the destination being typed rather than browsed to."""
+        if self._tree is not None:
+            self._refresh_ops(self._tree, self._dest_var.get().strip()
+                              or "/destination/")
+        self._update_summary()
+        self._check_ready()
+
     def _check_ready(self):
-        ok = bool(self._dest_var.get().strip()) and bool(self._ops)
-        self._run_btn.config(state="normal" if ok else "disabled")
+        """Arm the run button, and say out loud what is still missing.
+
+        The button is the whole point of this tab, so leaving it grey without
+        a reason is what makes the tab feel broken rather than incomplete.
+        """
+        has_dest = bool(self._dest_var.get().strip())
+        has_ops = bool(self._ops)
+        ok = has_dest and has_ops
+        self._run_btn.config(state="normal" if ok else "disabled",
+                             bg=PRIMARY if ok else SURFACE2,
+                             fg=ON_ACCENT if ok else MUTED,
+                             cursor="hand2" if ok else "arrow")
+        if ok:
+            self._blocked_lbl.config(text="")
+        elif not has_ops:
+            self._blocked_lbl.config(text=t("blocked_no_structure"))
+        else:
+            self._blocked_lbl.config(text=t("blocked_no_dest"))
 
     def _run(self):
         dest = self._dest_var.get().strip()
@@ -516,24 +592,24 @@ class OrganizeTab(tk.Frame):
         win.grab_set()
 
         tr(tk.Label(win,
-                 
-                 bg=SURFACE, fg=ORANGE, font=("Segoe UI", 10, "bold"),
+
+                 bg=SURFACE, fg=ORANGE, font=font(SIZE_BODY, "bold"),
                  pady=10, padx=16), "ops_collision", n=len(collisions)).pack(anchor="w")
 
         lf = tk.Frame(win, bg=SURFACE2, padx=12, pady=8)
         lf.pack(fill="x", padx=16, pady=(0, 8))
         for _src, dst in collisions[:8]:
             tk.Label(lf, text=f"• {os.path.basename(dst)}",
-                     bg=SURFACE2, fg=MUTED, font=("Segoe UI", 8),
+                     bg=SURFACE2, fg=MUTED, font=font(SIZE_MICRO),
                      anchor="w").pack(fill="x")
         if len(collisions) > 8:
-            tr(tk.Label(lf, 
-                     bg=SURFACE2, fg=MUTED, font=("Segoe UI", 8, "italic"),
+            tr(tk.Label(lf,
+                     bg=SURFACE2, fg=MUTED, font=font(SIZE_MICRO, "italic"),
                      anchor="w"), "n_others", n=len(collisions)-8).pack(fill="x")
 
         tk.Frame(win, bg=BORDER, height=1).pack(fill="x", pady=(4, 8))
-        tr(tk.Label(win, 
-                 bg=SURFACE, fg=TEXT, font=("Segoe UI", 9),
+        tr(tk.Label(win,
+                 bg=SURFACE, fg=TEXT, font=font(SIZE_SMALL),
                  padx=16), "duplicates_q").pack(anchor="w", pady=(0, 6))
 
         chosen = tk.StringVar(value="")
@@ -545,21 +621,21 @@ class OrganizeTab(tk.Frame):
             chosen.set(val)
             win.destroy()
 
-        tr(tk.Button(btn_frame, 
+        tr(tk.Button(btn_frame,
                   bg=SURFACE2, fg=MUTED, relief="flat",
-                  font=("Segoe UI", 9), padx=10, pady=6, cursor="hand2",
+                  font=font(SIZE_SMALL), padx=10, pady=6, cursor="hand2",
                   command=lambda: pick(executor.SKIP)), "dup_ignore").pack(side="left", padx=(0, 6))
-        tr(tk.Button(btn_frame, 
+        tr(tk.Button(btn_frame,
                   bg=ORANGE, fg="white", relief="flat",
-                  font=("Segoe UI", 9, "bold"), padx=10, pady=6, cursor="hand2",
+                  font=font(SIZE_SMALL, "bold"), padx=10, pady=6, cursor="hand2",
                   command=lambda: pick(executor.REPLACE)), "dup_replace").pack(side="left", padx=(0, 6))
-        tr(tk.Button(btn_frame, 
-                  bg=PRIMARY, fg="#0f3638", relief="flat",
-                  font=("Segoe UI", 9, "bold"), padx=10, pady=6, cursor="hand2",
+        tr(tk.Button(btn_frame,
+                  bg=PRIMARY, fg=ON_ACCENT, relief="flat",
+                  font=font(SIZE_SMALL, "bold"), padx=10, pady=6, cursor="hand2",
                   command=lambda: pick(executor.RENAME)), "dup_rename").pack(side="left", padx=(0, 6))
-        tr(tk.Button(btn_frame, 
+        tr(tk.Button(btn_frame,
                   bg=SURFACE2, fg=TEXT, relief="flat",
-                  font=("Segoe UI", 9), padx=10, pady=6, cursor="hand2",
+                  font=font(SIZE_SMALL), padx=10, pady=6, cursor="hand2",
                   command=lambda: pick("")), "cancel").pack(side="right")
 
         win.update_idletasks()
